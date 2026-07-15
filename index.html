@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Settld</title>
+  <meta name="description" content="Split. Prove. Settle. Shared expenses with proof, a transparent trail and easy UPI settlement.">
+  <meta name="theme-color" content="#0A0A0C">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <!-- refraction map for the liquid glass dock and appbar -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <filter id="lg-lens" x="-30%" y="-30%" width="160%" height="160%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.009 0.016" numOctaves="2" seed="7" result="n"/>
+      <feDisplacementMap in="SourceGraphic" in2="n" scale="18" xChannelSelector="R" yChannelSelector="G"/>
+    </filter>
+  </svg>
+
+  <header id="appbar">
+    <div class="veil" aria-hidden="true"></div>
+    <div class="bar">
+      <span id="bar-left"></span>
+      <span class="bar-title" id="bar-title"></span>
+      <span id="bar-right"></span>
+    </div>
+  </header>
+
+  <div id="app"><main id="screen"></main></div>
+
+  <nav id="dock" class="glass" aria-label="Main">
+    <a href="#/" data-tab="home"></a>
+    <a href="#/activity" data-tab="activity"></a>
+    <a href="#/settings" data-tab="settings"></a>
+  </nav>
+
+  <div id="sheets"></div>
+  <div id="toast" role="status"></div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

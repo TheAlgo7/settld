@@ -1,0 +1,11 @@
+{
+  "name": "settld",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Split. Prove. Settle. Shared expenses with proof, a transparent trail and easy UPI settlement.",
+  "scripts": {
+    "start": "npx -y serve -l 5173 .",
+    "test": "node tests/ledger.test.mjs"
+  }
+}
