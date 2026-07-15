@@ -6,6 +6,35 @@
 import { db } from "./db.js";
 import { fmt } from "./money.js";
 
+export const LIMITS = Object.freeze({
+  profileName: 120,
+  upi: 200,
+  groupName: 160,
+  memberName: 120,
+  members: 100,
+  expenseDesc: 300,
+  expenseNotes: 1000,
+  settlementNote: 500,
+  attachments: 20,
+  attachmentName: 300,
+  eventSummary: 1000,
+});
+
+const limited = (value, max, trim = true) => {
+  const text = String(value ?? "");
+  return (trim ? text.trim() : text).slice(0, max);
+};
+
+function limitedAttachments(values) {
+  const ids = Array.isArray(values) ? values : [];
+  if (ids.length > LIMITS.attachments) {
+    const error = new Error(`No more than ${LIMITS.attachments} proofs can be attached`);
+    error.code = "proof/too-many";
+    throw error;
+  }
+  return [...ids];
+}
+
 export const state = {
   ready: false,
   profile: null, // { name, upi, theme }
@@ -27,6 +56,55 @@ function emit() {
 export const uid = () =>
   crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
+export function normalizeProfile(profile, now = Date.now()) {
+  if (!profile) return null;
+  const themes = new Set(["dark", "light", "system"]);
+  return {
+    name: limited(typeof profile.name === "string" ? profile.name : "", LIMITS.profileName),
+    upi: limited(typeof profile.upi === "string" ? profile.upi : "", LIMITS.upi),
+    theme: themes.has(profile.theme) ? profile.theme : "dark",
+    updatedAt: Number.isInteger(profile.updatedAt) && profile.updatedAt > 0 ? profile.updatedAt : now,
+  };
+}
+
+export function normalizeStoredRecord(storeName, record) {
+  if (!record) return record;
+  if (storeName === "groups") {
+    return {
+      ...record,
+      name: limited(record.name, LIMITS.groupName),
+      members: (Array.isArray(record.members) ? record.members : []).map((member) => ({
+        ...member,
+        name: limited(member.name, LIMITS.memberName),
+        upi: limited(member.upi, LIMITS.upi),
+      })),
+    };
+  }
+  if (storeName === "expenses") {
+    return {
+      ...record,
+      desc: limited(record.desc, LIMITS.expenseDesc),
+      notes: limited(record.notes, LIMITS.expenseNotes, false),
+      attachments: Array.isArray(record.attachments) ? record.attachments : [],
+    };
+  }
+  if (storeName === "settlements") {
+    return {
+      ...record,
+      note: limited(record.note, LIMITS.settlementNote, false),
+      attachments: Array.isArray(record.attachments) ? record.attachments : [],
+    };
+  }
+  if (storeName === "events") {
+    return {
+      ...record,
+      actor: limited(record.actor ?? "You", LIMITS.profileName),
+      summary: limited(record.summary, LIMITS.eventSummary, false),
+    };
+  }
+  return record;
+}
+
 export async function init() {
   const [groups, expenses, settlements, events, profile] = await Promise.all([
     db.all("groups"),
@@ -35,11 +113,26 @@ export async function init() {
     db.all("events"),
     db.kvGet("profile"),
   ]);
-  state.groups = groups.sort((a, b) => b.updatedAt - a.updatedAt);
-  state.expenses = expenses;
-  state.settlements = settlements;
-  state.events = events;
-  state.profile = profile ?? null;
+  const migrateRecords = async (storeName, records) => Promise.all(records.map(async (record) => {
+    const normalized = normalizeStoredRecord(storeName, record);
+    if (JSON.stringify(record) !== JSON.stringify(normalized)) await db.put(storeName, normalized, true);
+    return normalized;
+  }));
+  const [migratedGroups, migratedExpenses, migratedSettlements, migratedEvents] = await Promise.all([
+    migrateRecords("groups", groups),
+    migrateRecords("expenses", expenses),
+    migrateRecords("settlements", settlements),
+    migrateRecords("events", events),
+  ]);
+  const migratedProfile = normalizeProfile(profile);
+  if (profile && JSON.stringify(profile) !== JSON.stringify(migratedProfile)) {
+    await db.kvSet("profile", migratedProfile, true);
+  }
+  state.groups = migratedGroups.sort((a, b) => b.updatedAt - a.updatedAt);
+  state.expenses = migratedExpenses;
+  state.settlements = migratedSettlements;
+  state.events = migratedEvents;
+  state.profile = migratedProfile;
   state.ready = true;
   emit();
 }
@@ -52,7 +145,7 @@ export const expensesOf = (gid) =>
     .filter((e) => e.groupId === gid && !e.deleted)
     .sort((a, b) => b.date - a.date || b.createdAt - a.createdAt);
 export const settlementsOf = (gid) =>
-  state.settlements.filter((s) => s.groupId === gid).sort((a, b) => b.createdAt - a.createdAt);
+  state.settlements.filter((s) => s.groupId === gid && !s.deleted).sort((a, b) => b.createdAt - a.createdAt);
 export const eventsOf = (gid) =>
   state.events.filter((e) => e.groupId === gid).sort((a, b) => b.ts - a.ts);
 export const allEvents = () => [...state.events].sort((a, b) => b.ts - a.ts);
@@ -72,9 +165,9 @@ async function logEvent(groupId, type, summary, data = {}) {
     id: uid(),
     groupId,
     ts: Date.now(),
-    actor: state.profile?.name ?? "You",
+    actor: limited(state.profile?.name ?? "You", LIMITS.profileName),
     type,
-    summary,
+    summary: limited(summary, LIMITS.eventSummary, false),
     data,
   };
   await db.put("events", ev);
@@ -85,21 +178,19 @@ async function logEvent(groupId, type, summary, data = {}) {
 // ---- actions ----
 
 export async function saveProfile(patch) {
-  state.profile = { name: "", upi: "", theme: "dark", ...state.profile, ...patch };
+  state.profile = normalizeProfile({ name: "", upi: "", theme: "dark", ...state.profile, ...patch, updatedAt: Date.now() });
   await db.kvSet("profile", state.profile);
   emit();
 }
 
 export async function createGroup({ name, emoji, memberNames = [] }) {
   const now = Date.now();
+  const otherNames = memberNames.map((n) => limited(n, LIMITS.memberName)).filter(Boolean).slice(0, LIMITS.members - 1);
   const members = [
-    { id: uid(), name: state.profile?.name || "You", upi: state.profile?.upi || "", isYou: true },
-    ...memberNames
-      .map((n) => n.trim())
-      .filter(Boolean)
-      .map((n) => ({ id: uid(), name: n, upi: "" })),
+    { id: uid(), name: limited(state.profile?.name || "You", LIMITS.memberName), upi: limited(state.profile?.upi || "", LIMITS.upi), isYou: true },
+    ...otherNames.map((n) => ({ id: uid(), name: n, upi: "" })),
   ];
-  const group = { id: uid(), name, emoji, currency: "INR", members, createdAt: now, updatedAt: now };
+  const group = { id: uid(), name: limited(name, LIMITS.groupName), emoji, currency: "INR", members, createdAt: now, updatedAt: now };
   await db.put("groups", group);
   state.groups.unshift(group);
   await logEvent(group.id, "group", `${group.members[0].name} created the group`);
@@ -108,8 +199,9 @@ export async function createGroup({ name, emoji, memberNames = [] }) {
 }
 
 export async function renameGroup(group, name, emoji) {
-  const changed = group.name !== name;
-  group.name = name;
+  const nextName = limited(name, LIMITS.groupName);
+  const changed = group.name !== nextName;
+  group.name = nextName;
   group.emoji = emoji;
   await touchGroup(group);
   if (changed) await logEvent(group.id, "group", `Group renamed to ${name}`);
@@ -137,7 +229,12 @@ export async function deleteGroup(group) {
 }
 
 export async function addMember(group, name) {
-  const m = { id: uid(), name: name.trim(), upi: "" };
+  if (group.members.length >= LIMITS.members) {
+    const error = new Error(`A group can have up to ${LIMITS.members} members`);
+    error.code = "group/member-limit";
+    throw error;
+  }
+  const m = { id: uid(), name: limited(name, LIMITS.memberName), upi: "" };
   group.members.push(m);
   await touchGroup(group);
   await logEvent(group.id, "member", `${m.name} joined the group`);
@@ -147,8 +244,19 @@ export async function addMember(group, name) {
 
 export async function updateMember(group, memberId, patch) {
   const m = memberOf(group, memberId);
-  Object.assign(m, patch);
+  const before = { name: m.name, upi: m.upi ?? "" };
+  const safePatch = { ...patch };
+  if ("name" in safePatch) safePatch.name = limited(safePatch.name, LIMITS.memberName);
+  if ("upi" in safePatch) safePatch.upi = limited(safePatch.upi, LIMITS.upi);
+  Object.assign(m, safePatch);
   await touchGroup(group);
+  if (before.name !== m.name) {
+    await logEvent(group.id, "member", `${before.name} was renamed to ${m.name}`, { memberId });
+  }
+  if (before.upi !== (m.upi ?? "")) {
+    const action = m.upi ? (before.upi ? "changed" : "added") : "removed";
+    await logEvent(group.id, "member", `${m.name}'s payment address was ${action}`, { memberId });
+  }
   emit();
 }
 
@@ -167,30 +275,48 @@ async function compressImage(blob) {
   if (!blob.type?.startsWith("image/")) return blob;
   try {
     const bmp = await createImageBitmap(blob);
-    const scale = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
-    const c = document.createElement("canvas");
-    c.width = Math.max(1, Math.round(bmp.width * scale));
-    c.height = Math.max(1, Math.round(bmp.height * scale));
-    c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height);
-    const out = await new Promise((res) => c.toBlob(res, "image/jpeg", 0.82));
-    return out && out.size < blob.size ? out : blob;
+    let maxSide = 1600;
+    let quality = 0.82;
+    let out = null;
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const scale = Math.min(1, maxSide / Math.max(bmp.width, bmp.height));
+      const c = document.createElement("canvas");
+      c.width = Math.max(1, Math.round(bmp.width * scale));
+      c.height = Math.max(1, Math.round(bmp.height * scale));
+      c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height);
+      out = await new Promise((res) => c.toBlob(res, "image/jpeg", quality));
+      if (out?.size <= 650000) break;
+      maxSide = Math.round(maxSide * 0.78);
+      quality = Math.max(0.56, quality - 0.08);
+    }
+    bmp.close?.();
+    if (out?.size <= 650000) return out;
+    throw new Error("proof/too-large");
   } catch {
-    return blob;
+    if (blob.size <= 650000) return blob;
+    throw new Error("proof/too-large");
   }
 }
 
 export async function addAttachment(blob, name) {
   const small = await compressImage(blob);
-  const rec = { id: uid(), blob: small, mime: small.type, name: name ?? "proof", ts: Date.now() };
+  const rec = { id: uid(), blob: small, mime: small.type, name: limited(name ?? "proof", LIMITS.attachmentName, false), ts: Date.now() };
   await db.put("attachments", rec);
   return rec.id;
 }
 
 export const getAttachment = (id) => db.get("attachments", id);
+export const deleteAttachment = (id) => db.del("attachments", id);
 
 export async function addExpense(group, data) {
   const now = Date.now();
-  const e = { id: uid(), groupId: group.id, createdAt: now, updatedAt: now, deleted: false, ...data };
+  const safeData = {
+    ...data,
+    desc: limited(data.desc, LIMITS.expenseDesc),
+    notes: limited(data.notes, LIMITS.expenseNotes, false),
+    attachments: limitedAttachments(data.attachments),
+  };
+  const e = { id: uid(), groupId: group.id, createdAt: now, updatedAt: now, deleted: false, ...safeData };
   await db.put("expenses", e);
   state.expenses.push(e);
   await logEvent(
@@ -205,8 +331,18 @@ export async function addExpense(group, data) {
 }
 
 export async function updateExpense(group, expense, patch, changeSummary) {
-  Object.assign(expense, patch, { updatedAt: Date.now() });
+  const previousAttachments = [...(expense.attachments ?? [])];
+  const safePatch = { ...patch };
+  if ("desc" in safePatch) safePatch.desc = limited(safePatch.desc, LIMITS.expenseDesc);
+  if ("notes" in safePatch) safePatch.notes = limited(safePatch.notes, LIMITS.expenseNotes, false);
+  if ("attachments" in safePatch) safePatch.attachments = limitedAttachments(safePatch.attachments);
+  Object.assign(expense, safePatch, { updatedAt: Date.now() });
   await db.put("expenses", expense);
+  const stillUsed = new Set([
+    ...state.expenses.flatMap((item) => item.attachments ?? []),
+    ...state.settlements.flatMap((item) => item.attachments ?? []),
+  ]);
+  await Promise.all(previousAttachments.filter((id) => !stillUsed.has(id)).map((id) => deleteAttachment(id)));
   await logEvent(group.id, "edit", `${expense.desc} edited: ${changeSummary}`, {
     expenseId: expense.id,
   });
@@ -232,8 +368,8 @@ export async function addSettlement(group, { fromId, toId, amountP, note, attach
     fromId,
     toId,
     amountP,
-    note: note ?? "",
-    attachments: attachments ?? [],
+    note: limited(note, LIMITS.settlementNote, false),
+    attachments: limitedAttachments(attachments),
     createdAt: Date.now(),
     deleted: false,
   };
@@ -245,6 +381,20 @@ export async function addSettlement(group, { fromId, toId, amountP, note, attach
   await touchGroup(group);
   emit();
   return s;
+}
+
+export async function voidSettlement(group, settlement) {
+  if (settlement.deleted) return;
+  settlement.deleted = true;
+  settlement.updatedAt = Date.now();
+  await db.put("settlements", settlement);
+  const from = memberOf(group, settlement.fromId)?.name ?? "?";
+  const to = memberOf(group, settlement.toId)?.name ?? "?";
+  await logEvent(group.id, "settle", `${from} to ${to} payment of ${fmt(settlement.amountP)} was reversed`, {
+    settlementId: settlement.id,
+  });
+  await touchGroup(group);
+  emit();
 }
 
 function payerNames(group, expense) {
@@ -264,8 +414,9 @@ export async function exportJson() {
   };
 }
 
-export async function eraseAll() {
+export async function eraseAll({ ownerUid, resetAt } = {}) {
   await db.wipe();
+  if (ownerUid && resetAt) await db.kvSet(`cloudResetAt:${ownerUid}`, resetAt, true);
   state.groups = [];
   state.expenses = [];
   state.settlements = [];

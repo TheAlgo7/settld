@@ -1,75 +1,102 @@
 # Settld
 
-Split. Prove. Settle.
+**Split. Prove. Settle.**
 
-A shared-expense app for trips, roommates and groups. The difference from Splitwise and friends: every expense can carry proof (receipts, UPI screenshots), every edit lands on an append-only trail, and settlement is one tap into your UPI app. Free at the core, forever.
+Settld is an offline-first shared-expense PWA for trips, homes, and groups. It keeps splits, receipt or payment proof, balances, and an append-only activity trail together without putting core use behind an account.
 
-## Status: v0.1.0, local-first prototype
+Production: [settld-ruddy.vercel.app](https://settld-ruddy.vercel.app)
 
-Fully working on-device app. No accounts, no server, no build step. All data lives in IndexedDB on your phone (receipts included as blobs). Firebase sync (Firestore + Storage + Auth) is the planned next layer; the data layer is pure and event-based so it bolts on without a rewrite.
+## Status
 
-## Run it
+Version 0.3.0 is a static, installable PWA with no application server or build step. IndexedDB is the source of truth, the service worker supports offline use, and every core flow also works in local mode without signing in.
 
-```
-cd Settld
-npm start        # serves on http://localhost:5173 (npx serve)
-```
+The current release includes:
 
-Any static server works (ES modules need http, so don't open index.html from file://). On your phone: serve on your LAN and open the IP, or deploy the folder as-is to Vercel/Netlify and install it as a PWA.
+- Groups, members, and equal, exact, percentage, or shares-based expense splits
+- Receipt and payment-proof attachments, compressed on-device
+- Recomputed balances and Smart settle's simple plan of at most `members - 1` transfers
+- An append-only trail for expenses, edits, deletions, and recorded payments
+- Optional UPI deep links that open the user's payment app
+- Dark, light, and system themes with the coral-on-void Settld design system
+- Responsive layouts, keyboard focus states, accessible sheets, and 48 px minimum touch targets
 
-```
-npm test         # ledger math tests (split rounding, balances, smart settle)
-```
+Settld calculates and records suggested payments; **it does not hold funds, initiate transfers, or process payments**.
 
-## What's inside
+## Data and Firebase
 
-- Groups with members, emoji, per-member UPI IDs
-- Expenses: equal / exact / percent / shares splits, multiple payers, categories, dates, notes
-- Proof: attach receipt photos and payment screenshots to any expense or settlement, stored on-device
-- Trail: append-only activity log per group; edits log what changed, deletes stay visible
-- Balances: your position, per-member nets, Smart settle (minimum transfers), share summary to WhatsApp
-- Clear up: UPI deep link (`upi://pay`) prefilled with amount and payee, mark settled with proof
-- Sample trip seeder to feel the app instantly
-- PWA: installable, offline via service worker, dark/light/system themes
+Local mode stores the ledger and proof in IndexedDB on that device. When a user signs in with Google, Settld mirrors their data to Firebase and restores it on another signed-in device:
 
-## Ledger rules (do not break these)
+- Firebase project: `settld-in`
+- Authentication: Google is enabled; `settld-ruddy.vercel.app` is authorized
+- Firestore: `(default)` database in `asia-south1`
+- Security: records live below `users/{uid}/...`; deployed rules enforce that UID, the allowed collections, document shapes, and proof-size limits
+- Sync: failed writes enter a serialized offline outbox; newer mutable records win, while tombstones keep hard deletions from being resurrected by stale devices
+- Proof: compressed attachments are stored as base64 in Firestore documents so the app does not depend on Firebase Storage
 
-- Money is integer paise everywhere. No floats.
-- Splits use deterministic largest-remainder distribution (ties broken by member id), so every device computes identical shares. Tests in `tests/ledger.test.mjs` pin this down.
-- Balances are recomputed from records, never stored. Deleted records are soft-deleted and excluded.
-- The events store is append-only.
+This Firebase layer is **personal per-UID backup and restore, not multi-user realtime collaboration**. People added to a group are ledger participants, not separate signed-in users, and there are no shared group documents or invitations yet.
 
-## Structure
+The first Google account used on a device claims its local dataset. Settld blocks a different account from merging with that data until the user exports or erases it, preventing cross-account ledger and proof leakage. Erasing while signed in deletes the device copy, writes an account reset marker, and removes the Firebase mirror.
 
-```
-index.html            shell, liquid-glass SVG filter, appbar/dock mounts
-css/app.css           One UI 9 design language, dark-first tokens
-js/money.js           paise math, formatting, split distribution (pure)
-js/settle.js          balances, min-transfer plan, UPI links (pure)
-js/db.js              IndexedDB wrapper
-js/store.js           state + actions + event trail + demo seed
-js/app.js             router, screens, sheets, rendering
-sw.js                 precache + stale-while-revalidate
-tests/ledger.test.mjs node-runnable math tests
-PRODUCT.md            product context (users, brand, principles)
-DESIGN.md             design tokens and component rules
+Production authentication is Google-only. Phone authentication is intentionally omitted until SMS billing and abuse controls are configured.
+
+## Run locally
+
+Node.js 22 is the CI version.
+
+```sh
+npm ci
+npm start
 ```
 
-## Design language
+Open `http://localhost:5173`. Any static HTTP server can serve the repository; ES modules will not work correctly by opening `index.html` through `file://`.
 
-Samsung One UI 9 physicality: large collapsing headers, content sunk toward the thumb, 26px grouped list cards, pill buttons, bottom sheets with grabbers, a floating liquid-glass dock (SVG feDisplacementMap refraction with blur fallback). Dark `#0A0A0C` base, warm off-white text, electric lime `#D7FF45` reserved for primary actions. Red and green mean money direction only.
+## Test
 
-## Roadmap
+```sh
+npm test          # ledger arithmetic and settlement invariants
+npm run test:e2e  # mobile Chromium product flow via Playwright
+```
 
-1. Firebase sync adapter: Firestore for records, Storage for proof images, Auth phone/Google; guest links for joining without an account
-2. Capacitor wrap for the Play Store build (PWA stays the iOS path first)
-3. PNG icons for iOS install (SVG manifest icons cover Android/desktop)
-4. Receipt OCR assist (amount/merchant detection, item-wise tap-to-assign)
-5. Verified-by-members state on expenses
-6. Multi-currency groups
+Playwright starts the local server when one is not already running. GitHub Actions runs both suites for pull requests and pushes to `main`.
 
-## Known v1 limits
+## Deploy
 
-- Single device, single "you": other members are names you track, not logged-in users (sync changes this)
+The GitHub repository is connected to Vercel. A push to `main` triggers the production deployment automatically; routine releases do not need a separate `vercel --prod` command.
+
+Firestore rule changes are deployed explicitly:
+
+```sh
+firebase deploy --only firestore:rules --project settld-in
+```
+
+## Ledger invariants
+
+- Money is stored as integer paise; ledger math never uses floating-point currency values.
+- Split rounding uses deterministic largest-remainder distribution, with member ID as the tie-breaker.
+- Balances are derived from expenses and settlements rather than stored as mutable totals.
+- Deleted records are soft-deleted, while the activity trail remains append-only.
+
+## Project map
+
+```text
+index.html                 App shell and PWA entry point
+css/app.css                Coral design tokens, components, and responsive layouts
+js/app.js                  Router, screens, sheets, and rendering
+js/store.js                State, actions, event trail, and sample data
+js/db.js                   IndexedDB persistence
+js/cloud.js                Google auth and per-UID Firestore mirror
+js/money.js                Deterministic currency and split math
+js/settle.js               Balances, transfer plan, and UPI links
+tests/ledger.test.mjs      Ledger unit tests
+tests/e2e/app.spec.mjs     Playwright product-flow coverage
+firestore.rules            Per-UID Firestore access policy
+PRODUCT.md                 Product scope and principles
+DESIGN.md                  Visual system and component rules
+```
+
+## Current limits
+
 - INR only
-- JSON export excludes image blobs (receipts stay on the device)
+- Personal backup rather than shared-account collaboration
+- Google sign-in only in production
+- Proof stored in Firestore is subject to the document-size guard in `js/cloud.js`

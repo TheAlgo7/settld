@@ -1,9 +1,101 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Each user can only touch their own mirror. Nothing is public.
-    match /users/{uid}/{document=**} {
-      allow read, write: if request.auth != null && request.auth.uid == uid;
+    function owns(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    match /users/{uid}/groups/{id} {
+      allow read, delete: if owns(uid);
+      allow create, update: if owns(uid)
+        && request.resource.data.keys().hasOnly(['id', 'name', 'emoji', 'currency', 'members', 'createdAt', 'updatedAt'])
+        && request.resource.data.id == id
+        && request.resource.data.name is string
+        && request.resource.data.name.size() <= 160
+        // v0.3 creates at most 100; the wider server guard keeps large v0.2
+        // ledgers restorable without silently dropping member references.
+        && request.resource.data.members is list
+        && request.resource.data.members.size() <= 500;
+    }
+
+    match /users/{uid}/expenses/{id} {
+      allow read, delete: if owns(uid);
+      allow create, update: if owns(uid)
+        && request.resource.data.keys().hasOnly(['id', 'groupId', 'createdAt', 'updatedAt', 'deleted', 'desc', 'amountP', 'category', 'date', 'payers', 'split', 'attachments', 'notes'])
+        && request.resource.data.id == id
+        && request.resource.data.desc is string
+        && request.resource.data.desc.size() <= 300
+        && request.resource.data.amountP is int
+        && request.resource.data.amountP > 0
+        // v0.3 creates at most 20; retain legacy proof references on restore.
+        && request.resource.data.attachments is list
+        && request.resource.data.attachments.size() <= 100
+        && request.resource.data.notes is string
+        && request.resource.data.notes.size() <= 1000;
+    }
+
+    match /users/{uid}/settlements/{id} {
+      allow read, delete: if owns(uid);
+      allow create, update: if owns(uid)
+        && request.resource.data.keys().hasOnly(['id', 'groupId', 'fromId', 'toId', 'amountP', 'note', 'attachments', 'createdAt', 'updatedAt', 'deleted'])
+        && request.resource.data.id == id
+        && request.resource.data.amountP is int
+        && request.resource.data.amountP > 0
+        && request.resource.data.note is string
+        && request.resource.data.note.size() <= 500
+        // v0.3 creates at most 20; retain legacy proof references on restore.
+        && request.resource.data.attachments is list
+        && request.resource.data.attachments.size() <= 100;
+    }
+
+    match /users/{uid}/events/{id} {
+      allow read, delete: if owns(uid);
+      allow create, update: if owns(uid)
+        && request.resource.data.keys().hasOnly(['id', 'groupId', 'ts', 'actor', 'type', 'summary', 'data'])
+        && request.resource.data.id == id
+        && request.resource.data.summary is string
+        && request.resource.data.summary.size() <= 1000;
+    }
+
+    match /users/{uid}/attachments/{id} {
+      allow read, delete: if owns(uid);
+      allow create, update: if owns(uid)
+        && request.resource.data.keys().hasOnly(['id', 'mime', 'name', 'ts', 'b64'])
+        && request.resource.data.id == id
+        && request.resource.data.mime is string
+        && request.resource.data.name is string
+        && request.resource.data.name.size() <= 300
+        && request.resource.data.b64 is string
+        && request.resource.data.b64.size() <= 900000;
+    }
+
+    match /users/{uid}/tombstones/{id} {
+      allow read, delete: if owns(uid);
+      allow create, update: if owns(uid)
+        && request.resource.data.keys().hasOnly(['store', 'key', 'deletedAt'])
+        && request.resource.data.store in ['groups', 'expenses', 'settlements', 'events', 'attachments']
+        && request.resource.data.key is string
+        && request.resource.data.key.size() <= 200
+        && request.resource.data.deletedAt is int;
+    }
+
+    match /users/{uid}/meta/profile {
+      allow read, delete: if owns(uid);
+      allow create, update: if owns(uid)
+        && request.resource.data.keys().hasOnly(['name', 'upi', 'theme', 'updatedAt'])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() <= 120
+        && request.resource.data.upi is string
+        && request.resource.data.upi.size() <= 200
+        && request.resource.data.theme in ['dark', 'light', 'system']
+        && request.resource.data.updatedAt is int;
+    }
+
+    match /users/{uid}/meta/state {
+      allow read, delete: if owns(uid);
+      allow create, update: if owns(uid)
+        && request.resource.data.keys().hasOnly(['resetAt'])
+        && request.resource.data.resetAt is int;
     }
   }
 }

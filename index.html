@@ -5,16 +5,20 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Settld</title>
   <meta name="description" content="Split. Prove. Settle. Shared expenses with proof, a transparent trail and easy UPI settlement.">
-  <meta name="theme-color" content="#0A0A0C">
+  <meta name="theme-color" content="#090A0B">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/app.css">
 </head>
 <body>
+  <a class="skip-link" href="#screen">Skip to content</a>
   <!-- refraction map for the liquid glass dock and appbar -->
   <svg width="0" height="0" style="position:absolute" aria-hidden="true">
     <filter id="lg-lens" x="-30%" y="-30%" width="160%" height="160%">
@@ -37,11 +41,12 @@
   <nav id="dock" class="glass" aria-label="Main">
     <a href="#/" data-tab="home"></a>
     <a href="#/activity" data-tab="activity"></a>
+    <a href="#/settlements" data-tab="settlements"></a>
     <a href="#/settings" data-tab="settings"></a>
   </nav>
 
   <div id="sheets"></div>
-  <div id="toast" role="status"></div>
+  <div id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
 
   <script type="module" src="js/app.js"></script>
 </body>

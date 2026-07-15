@@ -21,7 +21,9 @@ export function fmtSigned(paise) {
 
 // "1,234.56" / "₹1234" / 1234.5 -> paise. NaN when unparseable.
 export function toPaise(input) {
-  const s = String(input ?? "").replace(/[^\d.]/g, "");
+  const raw = String(input ?? "").trim();
+  if (raw.includes("-")) return NaN;
+  const s = raw.replace(/[^\d.]/g, "");
   if (!s || s === ".") return NaN;
   const n = Number(s);
   if (!Number.isFinite(n)) return NaN;
@@ -39,8 +41,10 @@ export function fromPaise(paise) {
 // same result: remainders tie-break on ascending id.
 export function distribute(totalP, weights) {
   if (!Number.isInteger(totalP) || totalP < 0) return null;
+  if (!Array.isArray(weights) || !weights.length) return null;
+  if (weights.some((x) => !Number.isFinite(x?.w) || x.w < 0)) return null;
   const sum = weights.reduce((a, x) => a + x.w, 0);
-  if (!(sum > 0)) return null;
+  if (!Number.isFinite(sum) || !(sum > 0)) return null;
   const rows = weights.map((x) => {
     const exact = (totalP * x.w) / sum;
     const base = Math.floor(exact);
@@ -66,7 +70,10 @@ export function computeShares(expense) {
   if (!parts.length) return new Map();
   const mode = expense.split.mode;
   if (mode === "exact") {
-    return new Map(parts.map((p) => [p.memberId, p.valueP ?? 0]));
+    const rows = parts.map((p) => [p.memberId, Number(p.valueP)]);
+    if (rows.some(([, value]) => !Number.isInteger(value) || value < 0)) return new Map();
+    if (rows.reduce((sum, [, value]) => sum + value, 0) !== expense.amountP) return new Map();
+    return new Map(rows);
   }
   const weightOf = (p) => (mode === "equal" ? 1 : Number(p.value) || 0);
   return (

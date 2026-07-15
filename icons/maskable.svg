@@ -1,8 +1,10 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" fill="#0B0C0F"/>
-  <g fill="none" stroke="#D7FF45" stroke-width="62" stroke-linecap="round"
-     transform="translate(256 256) scale(0.66) translate(-256 -256)">
-    <path d="M 347 175 C 347 133 303 114 257 114 C 207 114 169 139 169 183 C 169 221 199 238 246 249"/>
-    <path d="M 269 265 C 316 276 345 293 345 331 C 345 375 307 397 256 397 C 206 397 166 377 163 335"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title description">
+  <title id="title">Settld</title>
+  <desc id="description">A mask-safe coral S-shaped settlement loop with a check mark.</desc>
+  <rect width="512" height="512" fill="#090A0B"/>
+  <g fill="#FF6F61" transform="translate(256 256) scale(.72) translate(-256 -256)">
+    <path d="M230 98h108a34 34 0 0 1 0 68H217c-32 0-57 25-57 57v80c-27-14-43-45-43-80 0-70 51-125 113-125Z"/>
+    <path d="M340 218v64c0 39-32 70-71 70H164a34 34 0 0 0 0 68h115c64 0 110-45 110-111 0-40-19-74-49-91Z"/>
+    <path d="m189 273 29-29 21 21 50-53h34l-84 98-21-1-29-36Z"/>
   </g>
 </svg>

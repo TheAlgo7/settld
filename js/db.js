@@ -5,6 +5,8 @@
 const NAME = "settld";
 const VERSION = 1;
 let opening = null;
+const deleteVersions = new Map();
+const mutationKey = (store, key) => `${store}:${String(key)}`;
 
 function open() {
   if (opening) return opening;
@@ -53,10 +55,16 @@ export const db = {
   },
   get: (store, key) => run(store, "readonly", (s) => s.get(key)),
   del: async (store, key, quiet = false) => {
+    const versionKey = mutationKey(store, key);
+    deleteVersions.set(versionKey, (deleteVersions.get(versionKey) ?? 0) + 1);
+    if (!quiet) {
+      const durability = mirror?.("del", store, key);
+      if (durability?.then) await durability;
+    }
     const r = await run(store, "readwrite", (s) => s.delete(key));
-    if (!quiet) mirror?.("del", store, key);
     return r;
   },
+  deleteVersion: (store, key) => deleteVersions.get(mutationKey(store, key)) ?? 0,
   all: (store) => run(store, "readonly", (s) => s.getAll()),
   allBy: (store, index, value) =>
     run(store, "readonly", (s) => s.index(index).getAll(value)),

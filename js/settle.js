@@ -8,19 +8,24 @@ export function computeBalances(memberIds, expenses, settlements) {
   const bal = new Map(memberIds.map((id) => [id, 0]));
   const add = (id, v) => bal.set(id, (bal.get(id) ?? 0) + v);
   for (const e of expenses) {
-    if (e.deleted) continue;
+    if (e.deleted || !Number.isInteger(e.amountP) || e.amountP <= 0) continue;
+    const payers = e.payers ?? [];
+    if (payers.some((payer) => !Number.isInteger(payer.amountP) || payer.amountP < 0)) continue;
+    if (payers.reduce((sum, payer) => sum + payer.amountP, 0) !== e.amountP) continue;
+    const shares = computeShares(e);
+    if ([...shares.values()].reduce((sum, share) => sum + share, 0) !== e.amountP) continue;
     for (const p of e.payers) add(p.memberId, p.amountP);
-    for (const [id, share] of computeShares(e)) add(id, -share);
+    for (const [id, share] of shares) add(id, -share);
   }
   for (const s of settlements) {
-    if (s.deleted) continue;
+    if (s.deleted || !Number.isInteger(s.amountP) || s.amountP <= 0) continue;
     add(s.fromId, s.amountP);
     add(s.toId, -s.amountP);
   }
   return bal;
 }
 
-// Greedy min-transfer plan: largest debtor pays largest creditor.
+// Greedy settlement plan: largest debtor pays largest creditor.
 // Produces at most (members - 1) transfers, deterministic order.
 export function simplify(balances) {
   const debtors = [];

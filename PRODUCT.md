@@ -17,8 +17,8 @@ They are young, design-aware, annoyed by Splitwise paywalls and ads. They will u
 ## Brand
 - Name: Settld. Tagline: Split. Prove. Settle.
 - Personality: calm, precise, quietly confident. A ledger you trust, not a bank that lectures you.
-- Look: near-black surfaces, warm off-white text, one electric lime accent. Red strictly for amounts owed, green strictly for amounts receivable or settled. Feels like a premium productivity tool, not a fintech app.
-- UI language: Samsung One UI 9 physicality. Large collapsing headers with content sunk toward the thumb, chunky rounded grouped lists, pill buttons, bottom sheets with grabbers, generous touch targets. One purposeful liquid-glass element: the floating bottom dock (SVG refraction, not flat blur).
+- Look: near-black surfaces, warm off-white text, and a confident coral accent. Coral marks primary action and selection, green means confirmed or receivable, and red is reserved for destructive and error states. Debt is described with words and signs, never color alone. Feels like a premium productivity tool, not a fintech app.
+- UI language: One UI-inspired ergonomics with a platform-neutral Settld identity. Large collapsing headers, content sunk toward the thumb, rounded grouped lists, bottom sheets with grabbers, 48px touch targets, and a restrained floating dock. Dark is the signature theme; a full light theme supports outdoor and receipt-capture use.
 
 ## Tone
 Human and direct. Short sentences. Indian-English comfortable ("Clear up", "hisab barabar"). Never corporate-finance. Never guilt-trippy about money. No em dashes anywhere in copy.
@@ -33,4 +33,4 @@ Human and direct. Short sentences. Indian-English comfortable ("Clear up", "hisa
 2. Ten-second expense entry: amount, payer, participants, done. Everything else optional.
 3. Money is integer paise, rounding is deterministic, history is append-only. The ledger must never feel mushy.
 4. Free core forever: no limits on groups, members, expenses, splits or basic proof.
-5. Local-first: works offline on a trip, syncs later (Firebase adapter planned: Firestore + Storage + Auth; v1 is on-device IndexedDB).
+5. Offline-first: IndexedDB is the source of truth. Optional Google sign-in mirrors a personal per-UID backup to Firestore and replays an outbox after reconnecting; shared-account collaboration is a separate future milestone.

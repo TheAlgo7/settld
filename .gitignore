@@ -1,7 +1,11 @@
 node_modules/
 .vercel/
 .firebase/
+.env
+.env.*
+!.env.example
 *.log
 .DS_Store
-
-.vercel
+tmp-*.png
+test-results/
+playwright-report/
