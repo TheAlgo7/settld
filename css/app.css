@@ -326,6 +326,14 @@ input.money {
   transform: translateY(0);
 }
 
+#bar-left,
+#bar-right {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+}
+
 .icon-btn {
   display: grid;
   flex: none;
@@ -370,22 +378,12 @@ input.money {
   font-weight: 700;
 }
 
-.screen-kicker {
-  display: block;
-  margin-bottom: 8px;
-  color: var(--text-2);
-  font-size: 13px;
-  font-weight: 600;
-}
-
 .section-cap {
   display: block;
   margin: 24px 4px 8px;
   color: var(--text-2);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.055em;
-  text-transform: uppercase;
+  font-size: 13px;
+  font-weight: 650;
 }
 
 .section-heading {
@@ -399,7 +397,7 @@ input.money {
 }
 
 .section-heading .section-cap {
-  margin: 0 0 4px;
+  margin: 3px 0 0;
 }
 
 .section-heading h2 {
@@ -782,16 +780,16 @@ input.money {
   flex: 1;
 }
 
-.provider-icon {
-  display: grid;
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  background: var(--accent-ink);
-  color: var(--accent);
-  font-size: 12px;
-  font-weight: 800;
-  place-items: center;
+.made-by {
+  display: inline-block;
+  margin-top: 14px;
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.made-by:hover {
+  color: var(--accent-text);
 }
 
 .seg {
@@ -1108,9 +1106,11 @@ input[type="date"].in {
   left: 50%;
   z-index: 28;
   display: flex;
-  width: min(520px, calc(100% - 28px));
+  gap: 2px;
+  width: max-content;
+  max-width: calc(100vw - 24px);
   padding: 7px;
-  border-radius: 31px;
+  border-radius: 999px;
   transform: translateX(-50%);
   transition: transform 260ms var(--ease), opacity 220ms var(--ease);
 }
@@ -1123,31 +1123,46 @@ input[type="date"].in {
 
 #dock a {
   display: flex;
-  flex: 1;
-  flex-direction: column;
+  flex: none;
   align-items: center;
   justify-content: center;
-  gap: 2px;
-  min-width: 0;
-  min-height: 54px;
-  border-radius: 24px;
+  min-width: 52px;
+  min-height: 50px;
+  padding: 0 15px;
+  border-radius: 999px;
   color: var(--text-2);
-  font-size: 10.5px;
+  font-size: 13px;
   font-weight: 650;
 }
 
+#dock a span {
+  max-width: 0;
+  margin-left: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  opacity: 0;
+  transition: max-width 220ms var(--ease) 45ms, margin-left 220ms var(--ease) 45ms, opacity 150ms ease 60ms;
+}
+
 #dock a:hover {
-  background: color-mix(in oklab, var(--surface-3) 64%, transparent);
   color: var(--text);
 }
 
 #dock a svg {
+  flex: none;
   width: 22px;
   height: 22px;
 }
 
 #dock a.on {
+  background: color-mix(in oklab, var(--accent) 20%, transparent);
   color: var(--text);
+}
+
+#dock a.on span {
+  max-width: 110px;
+  margin-left: 8px;
+  opacity: 1;
 }
 
 #dock a.on svg {
@@ -1355,11 +1370,6 @@ input[type="date"].in {
   line-height: 1.03;
 }
 
-.welcome-hero h2 em {
-  color: var(--accent);
-  font-style: normal;
-}
-
 .welcome-hero p {
   max-width: 48ch;
   margin-top: 13px;
@@ -1419,10 +1429,6 @@ input[type="date"].in {
   background: var(--accent-soft);
   font-size: 28px;
   place-items: center;
-}
-
-.group-title-line .screen-kicker {
-  margin-bottom: 2px;
 }
 
 .group-meta {
@@ -1664,11 +1670,6 @@ input[type="date"].in {
   align-items: flex-start;
   gap: 14px;
   margin: 30px 4px 12px;
-}
-
-.settle-intro .section-cap {
-  margin: 1px 0 4px;
-  color: var(--accent-text);
 }
 
 .settle-intro h2 {
@@ -2275,12 +2276,8 @@ input[type="date"].in {
     font-size: 11.5px;
   }
 
-  #dock {
-    width: calc(100% - 18px);
-  }
-
   #dock a {
-    font-size: 9.5px;
+    padding: 0 13px;
   }
 
   .fab {

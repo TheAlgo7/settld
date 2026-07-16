@@ -6,6 +6,8 @@ Settld is an offline-first shared-expense PWA for trips, homes, and groups. It k
 
 Production: [settld-ruddy.vercel.app](https://settld-ruddy.vercel.app)
 
+Designed and built by [Gaurav Kumar · The Algothrim](https://thealgothrim.com).
+
 ## Status
 
 Version 0.3.0 is a static, installable PWA with no application server or build step. IndexedDB is the source of truth, the service worker supports offline use, and every core flow also works in local mode without signing in.

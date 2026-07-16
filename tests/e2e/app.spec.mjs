@@ -14,12 +14,14 @@ test("local trip flows stay fast, traceable, responsive, and theme-safe", async 
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Split. Prove. Settle." })).toBeVisible();
   const googleButton = page.getByRole("button", { name: "Continue with Google" });
-  await expect(googleButton).toBeFocused();
+  // The dialog itself takes focus on open (focusing the first control would
+  // paint a focus ring on every open); Tab enters the trap at the top.
+  await expect(page.getByRole("dialog")).toBeFocused();
   await expect(page.getByRole("button", { name: /phone number/i })).toHaveCount(0);
-  await page.keyboard.press("Shift+Tab");
-  await expect(page.getByRole("button", { name: "Continue on this device" })).toBeFocused();
   await page.keyboard.press("Tab");
   await expect(googleButton).toBeFocused();
+  await page.keyboard.press("Shift+Tab");
+  await expect(page.getByRole("button", { name: "Continue on this device" })).toBeFocused();
 
   await page.getByRole("button", { name: "Continue on this device" }).click();
   await page.getByLabel("Your name").fill("Gaurav");
@@ -78,7 +80,8 @@ test("local trip flows stay fast, traceable, responsive, and theme-safe", async 
   await page.getByRole("tab", { name: "Balances" }).click();
   await expect(page.getByText("You get back", { exact: true })).toBeVisible();
   await expect(page.getByText("Gets ₹2,078.95", { exact: true })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "3 transfers clear every balance" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Smart settle" })).toBeVisible();
+  await expect(page.getByText("3 transfers clear every current balance", { exact: false })).toBeVisible();
   await page.getByRole("button", { name: "Record" }).first().click();
   await expect(page.getByRole("heading", { name: "Record payment" })).toBeVisible();
   await expect(page.getByText(/Record this only after .* confirms the payment/)).toBeVisible();

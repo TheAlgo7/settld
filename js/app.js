@@ -237,7 +237,9 @@ function openSheet({ title, body, footer, locked = false, onClose }) {
   sheetStack.push({ wrap, locked, onClose, previousFocus, onKeydown });
   setShellInert(true);
   hydrate(wrap);
-  requestAnimationFrame(() => (wrap.querySelector(FOCUSABLE) ?? $(".sheet", wrap)).focus({ preventScroll: true }));
+  // Focus the dialog itself, not its first control: auto-focusing a button
+  // paints a focus ring on every open, which reads as a broken double border.
+  requestAnimationFrame(() => $(".sheet", wrap).focus({ preventScroll: true }));
   return wrap;
 }
 
@@ -425,7 +427,9 @@ function HomeScreen() {
 
   const sub =
     rows.length === 0
-      ? `Ready when you are, ${esc(name)}.`
+      ? store.state.profile?.name
+        ? `Ready when you are, ${esc(name)}.`
+        : "Ready when you are."
       : overall === 0
         ? "Everything is clear. Hisab barabar."
         : overall > 0
@@ -459,10 +463,7 @@ function HomeScreen() {
     });
     body.append(empty);
   } else {
-    const heading = el(`<div class="section-heading"><div><span class="section-cap">Your ledgers</span><h2>${rows.length} active group${rows.length === 1 ? "" : "s"}</h2></div><button class="icon-btn soft" aria-label="Create group">${I.plus}</button></div>`);
-    heading.querySelector("button").addEventListener("click", () => newGroupSheet());
-    body.append(heading);
-    const list = el(`<div class="list group-list"></div>`);
+    const list = el(`<div class="list group-list" style="margin-top:26px"></div>`);
     for (const { g, net, spend, count } of rows) {
       const endHtml =
         net === 0
@@ -493,7 +494,7 @@ function HomeScreen() {
 function ActivityScreen() {
   const events = store.allEvents();
   const view = el(`<div class="screen-activity">
-    <div class="display"><span class="screen-kicker">Append-only trail</span><h1>Activity</h1><div class="sub">Every add, edit, and payment stays visible.</div></div>
+    <div class="display"><h1>Activity</h1><div class="sub">Every add, edit, and payment stays visible.</div></div>
     <div class="act-body"></div>
   </div>`);
   const body = $(".act-body", view);
@@ -515,7 +516,7 @@ function SettlementsScreen() {
     .filter(({ plan }) => plan.length);
   const transfers = groups.reduce((n, item) => n + item.plan.length, 0);
   const view = el(`<div class="screen-settlements">
-    <div class="display"><span class="screen-kicker">Smart settle</span><h1>Settlements</h1>
+    <div class="display"><h1>Settlements</h1>
       <div class="sub">${transfers ? `${transfers} transfer${transfers === 1 ? "" : "s"} can clear every current balance.` : "No payments are pending across your groups."}</div></div>
     <div class="settlements-body"></div>
   </div>`);
@@ -525,7 +526,7 @@ function SettlementsScreen() {
     body.append(el(`<div class="empty"><div class="settle-seal">${I.check}</div><h3>All clear</h3><p>When a group has money left to clear, the simplest payment plan will show up here.</p></div>`));
   } else {
     for (const { g, plan } of groups) {
-      const section = el(`<section class="settlement-group"><button class="section-heading link-heading"><div><span class="section-cap">${esc(g.emoji ?? "🧾")} ${esc(g.name)}</span><h2>${plan.length} transfer${plan.length === 1 ? "" : "s"}</h2></div><span class="chev">${I.chevR}</span></button><div class="list plain"></div></section>`);
+      const section = el(`<section class="settlement-group"><button class="section-heading link-heading"><div><h2>${esc(g.emoji ?? "🧾")} ${esc(g.name)}</h2><span class="section-cap">${plan.length} transfer${plan.length === 1 ? "" : "s"} to clear up</span></div><span class="chev">${I.chevR}</span></button><div class="list plain"></div></section>`);
       $(".link-heading", section).addEventListener("click", () => {
         ui.groupTab.set(g.id, "balances");
         location.hash = `#/group/${g.id}`;
@@ -583,7 +584,7 @@ function trailList(events, showGroup = false) {
 function SettingsScreen() {
   const p = store.state.profile ?? { name: "", upi: "", theme: "dark" };
   const view = el(`<div class="screen-you">
-    <div class="display"><span class="screen-kicker">Profile and preferences</span><h1>You</h1></div>
+    <div class="display"><h1>You</h1><div class="sub">Profile, backup and preferences.</div></div>
 
     <div class="section-cap">You</div>
     <label class="cap-label" for="st-name">Your name</label>
@@ -618,8 +619,9 @@ function SettingsScreen() {
 
     <div class="empty" style="padding-top:36px">
       <div class="mark">${MARK}</div>
-      <h3>Settld 0.3.0</h3>
+      <h3>Settld 0.3.1</h3>
       <p>Split. Prove. Settle.<br>Core splitting stays free. Your device remains the source of truth.</p>
+      <a class="made-by" href="https://thealgothrim.com" target="_blank" rel="noopener">Designed and built by Gaurav Kumar · The Algothrim</a>
     </div>
   </div>`);
 
@@ -760,7 +762,7 @@ function GroupScreen(id) {
 
   const view = el(`<div class="screen-group">
     <div class="display group-display">
-      <div class="group-title-line"><span class="group-emoji">${esc(g.emoji ?? "🧾")}</span><div><span class="screen-kicker">Shared ledger</span><h1>${esc(g.name)}</h1></div></div>
+      <div class="group-title-line"><span class="group-emoji">${esc(g.emoji ?? "🧾")}</span><div><h1>${esc(g.name)}</h1></div></div>
       <div class="group-meta">${avatarStackHtml(g.members)}<span>${g.members.length} members</span><span class="meta-dot"></span><span class="money">${fmt(spend)} spent</span></div>
     </div>
     <div class="seg group-tabs" role="tablist" aria-label="Group sections">
@@ -838,7 +840,7 @@ function overviewTab(g, exps, bal, setts, you, spend) {
     <div class="ledger-stats">
       <span><b>${exps.length}</b> expenses</span>
       <span><b>${withProof}</b> with proof</span>
-      <span><b>${setts.length}</b> payments recorded</span>
+      <span><b>${setts.length}</b> payment${setts.length === 1 ? "" : "s"} recorded</span>
     </div>
   </section>`));
 
@@ -870,7 +872,7 @@ function overviewTab(g, exps, bal, setts, you, spend) {
     box.append(settle);
   }
 
-  box.append(el(`<div class="section-heading recent-heading"><div><span class="section-cap">Recent</span><h2>Latest expenses</h2></div></div>`));
+  box.append(el(`<div class="section-heading recent-heading"><div><h2>Recent expenses</h2></div></div>`));
   if (exps.length) box.append(expenseRows(g, exps.slice(0, 3), you, false));
   else box.append(el(`<div class="empty compact"><h3>No expenses yet</h3><p>Add the first one and the hisab begins.</p></div>`));
   if (exps.length > 3) {
@@ -958,7 +960,7 @@ function balancesTab(g, bal, setts, you) {
     <div class="note">${net > 0 ? "This is what the group currently owes you." : net < 0 ? "Smart settle shows a simple payment plan below." : "Hisab barabar. Nothing is pending."}</div>
   </div>`));
 
-  box.append(el(`<div class="section-heading"><div><span class="section-cap">Member positions</span><h2>Balances</h2></div></div>`));
+  box.append(el(`<div class="section-heading"><div><h2>Balances</h2></div></div>`));
   const list = el(`<div class="list plain"></div>`);
   for (const m of g.members) {
     const v = bal.get(m.id) ?? 0;
@@ -973,7 +975,7 @@ function balancesTab(g, bal, setts, you) {
 
   const plan = simplify(bal);
   if (plan.length) {
-    box.append(el(`<div class="settle-intro"><span class="settle-seal">${I.check}</span><div><span class="section-cap">Smart settle</span><h2>${plan.length} transfer${plan.length > 1 ? "s" : ""} clear every balance</h2><p>A simple plan with no more than one fewer transfer than members. Settld does not move money itself.</p></div></div>`));
+    box.append(el(`<div class="settle-intro"><span class="settle-seal">${I.check}</span><div><h2>Smart settle</h2><p>${plan.length} transfer${plan.length > 1 ? "s" : ""} clear every current balance. Settld suggests the plan; it never moves money.</p></div></div>`));
     const pl = el(`<div class="list plain settle-plan"></div>`);
     for (const t of plan) {
       const from = store.memberOf(g, t.fromId);
@@ -992,7 +994,7 @@ function balancesTab(g, bal, setts, you) {
   }
 
   if (paymentHistory.length) {
-    box.append(el(`<div class="section-heading"><div><span class="section-cap">Payment history</span><h2>Recorded</h2></div></div>`));
+    box.append(el(`<div class="section-heading"><div><h2>Payment history</h2></div></div>`));
     const sl = el(`<div class="list"></div>`);
     for (const s of paymentHistory) {
       const from = store.memberOf(g, s.fromId);
@@ -1026,7 +1028,7 @@ function settlementDetailSheet(g, settlement) {
   </div>`);
   const proofs = $(".settlement-proofs", body);
   if (settlement.attachments?.length) {
-    proofs.append(el(`<div class="section-heading"><div><span class="section-cap">Evidence</span><h2>Payment proof</h2></div></div>`));
+    proofs.append(el(`<div class="section-heading"><div><h2>Payment proof</h2></div></div>`));
     const thumbs = el(`<div class="thumbs proof-gallery"></div>`);
     for (const [index, id] of settlement.attachments.entries()) {
       const button = el(`<button class="thumb-button pressable" aria-label="View payment proof ${index + 1}"><img class="thumb" data-att="${id}" alt=""></button>`);
@@ -1187,7 +1189,7 @@ async function welcomeSheet() {
 // Google sign-in control, shared by the welcome sheet and settings.
 function authOptions(onSignedIn) {
   const box = el(`<div>
-    <button class="btn primary au-google"><span class="provider-icon">G</span>Continue with Google</button>
+    <button class="btn primary au-google">Continue with Google</button>
   </div>`);
   $(".au-google", box).addEventListener("click", async (e) => {
     const button = e.currentTarget;
@@ -1236,7 +1238,7 @@ function welcomeAuthSheet() {
   const body = el(`<div>
     <div class="welcome-hero">
       <div class="welcome-lockup"><span class="mark">${MARK}</span><strong>Settld</strong></div>
-      <h2>Split. Prove. <em>Settle.</em></h2>
+      <h2>Split. Prove. Settle.</h2>
       <p>Shared expenses with the receipt, payment proof, and edit history kept together.</p>
       <div class="trust-points"><span>${I.clip} Proof stays attached</span><span>${I.pulse} Every edit stays visible</span></div>
     </div>
@@ -1838,7 +1840,7 @@ function expenseDetailSheet(g, e) {
       ${e.notes ? `<blockquote>${esc(e.notes)}</blockquote>` : ""}
       <div class="proof-status ${e.attachments?.length ? "has-proof" : "no-proof"}">${e.attachments?.length ? `${I.clip}<span><strong>Proof attached</strong><small>${e.attachments.length} image${e.attachments.length === 1 ? "" : "s"} kept with this expense</small></span>` : `${I.receipt}<span><strong>No proof attached</strong><small>Add the receipt now or whenever you find it</small></span><button class="btn quiet small detail-add-proof">Add proof</button>`}</div>
     </div>
-    <div class="section-heading"><div><span class="section-cap">Split detail</span><h2>Who owes what</h2></div></div>
+    <div class="section-heading"><div><h2>Who owes what</h2></div></div>
     <div class="list plain x-shares"></div>
     <div class="x-proofwrap"></div>
     <div class="x-trailwrap"></div>
@@ -1858,7 +1860,7 @@ function expenseDetailSheet(g, e) {
 
   if (e.attachments?.length) {
     const wrap = $(".x-proofwrap", body);
-    wrap.append(el(`<div class="section-heading"><div><span class="section-cap">Evidence</span><h2>Proof</h2></div></div>`));
+    wrap.append(el(`<div class="section-heading"><div><h2>Proof</h2></div></div>`));
     const t = el(`<div class="thumbs proof-gallery"></div>`);
     for (const [index, id] of e.attachments.entries()) {
       const button = el(`<button class="thumb-button pressable" aria-label="View proof ${index + 1}"><img class="thumb" data-att="${id}" alt=""></button>`);

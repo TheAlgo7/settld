@@ -1,0 +1,19 @@
+# Settld
+
+Split. Prove. Settle.
+
+Settld is a free, offline-first shared-expense PWA for trips, homes and groups, built for India-first use (UPI settlement links, INR). Its differentiator is evidence: receipts and payment proof attach to expenses and settlements, and an append-only trail records every add, edit, delete and payment. Core splitting is free with no limits, ads or paywalled basics.
+
+Production: https://settld-ruddy.vercel.app
+
+## How it works
+
+- The device is the source of truth (IndexedDB); the app works fully offline and without an account.
+- Optional Google sign-in mirrors the user's ledger to a private per-user Firebase backup (project settld-in, Firestore in asia-south1). This is personal backup and restore, not multi-user collaboration.
+- Money is integer paise with deterministic largest-remainder splits. Balances are always recomputed from records.
+- Smart settle proposes at most members-minus-one transfers. Settld never holds or moves money; UPI deep links open the user's own payment app.
+
+## Creator
+
+Designed and developed by Gaurav Kumar (The Algothrim), https://thealgothrim.com.
+App code and UI: Copyright 2026 Gaurav Kumar. All rights reserved.
