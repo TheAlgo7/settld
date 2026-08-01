@@ -7,19 +7,41 @@ async function continueLocally(page) {
   if (await deviceButton.isVisible()) await deviceButton.click();
 }
 
-test("local trip flows stay fast, traceable, responsive, and theme-safe", async ({ page, context }) => {
+async function startWith(page, name) {
+  await page.goto("/");
+  await continueLocally(page);
+  await page.getByLabel("Your name").fill(name);
+  await page.getByRole("button", { name: "Get started" }).click();
+  await page.getByRole("button", { name: "Explore a sample trip" }).click();
+  await expect(page.getByRole("heading", { name: "Ahmedabad trip" })).toBeVisible();
+}
+
+const attachmentCount = (page) =>
+  page.evaluate(async () => {
+    const request = indexedDB.open("settld", 1);
+    const database = await new Promise((resolve, reject) => {
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    const transaction = database.transaction("attachments", "readonly");
+    const count = transaction.objectStore("attachments").count();
+    return new Promise((resolve, reject) => {
+      count.onsuccess = () => resolve(count.result);
+      count.onerror = () => reject(count.error);
+    });
+  });
+
+test("a group reads as one screen: position, who owes whom, then expenses", async ({ page, context }) => {
   const pageErrors = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
 
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Split. Prove. Settle." })).toBeVisible();
-  const googleButton = page.getByRole("button", { name: "Continue with Google" });
   // The dialog itself takes focus on open (focusing the first control would
   // paint a focus ring on every open); Tab enters the trap at the top.
   await expect(page.getByRole("dialog")).toBeFocused();
-  await expect(page.getByRole("button", { name: /phone number/i })).toHaveCount(0);
   await page.keyboard.press("Tab");
-  await expect(googleButton).toBeFocused();
+  await expect(page.getByRole("button", { name: "Continue with Google" })).toBeFocused();
   await page.keyboard.press("Shift+Tab");
   await expect(page.getByRole("button", { name: "Continue on this device" })).toBeFocused();
 
@@ -30,14 +52,14 @@ test("local trip flows stay fast, traceable, responsive, and theme-safe", async 
 
   await page.getByRole("button", { name: "Explore a sample trip" }).click();
   await expect(page.getByRole("heading", { name: "Ahmedabad trip" })).toBeVisible();
-  await expect(page.getByRole("tab", { name: "Overview", selected: true })).toBeVisible();
-  await page.getByRole("tab", { name: "Overview" }).focus();
-  await page.keyboard.press("ArrowRight");
-  await expect(page.getByRole("tab", { name: "Expenses", selected: true })).toBeFocused();
-  await page.keyboard.press("ArrowLeft");
-  await expect(page.getByRole("tab", { name: "Overview", selected: true })).toBeFocused();
-  await expect(page.locator(".ledger-hero")).toContainText("₹7,338.60");
-  await expect(page.getByRole("button", { name: /Smart settle.*3 transfers clear the group/ })).toBeVisible();
+
+  // The old four-tab group screen is gone; everything is on one surface.
+  await expect(page.getByRole("tab")).toHaveCount(0);
+  await expect(page.locator(".money-block")).toContainText("₹2,078.95");
+  await expect(page.locator(".money-block")).toContainText("₹7,338.60 spent across 4 expenses");
+  await expect(page.locator(".owe-row")).toHaveCount(3);
+  await expect(page.locator(".owe-row").first()).toContainText("owes you");
+  await expect(page.getByRole("button", { name: /Hotel, two nights/ })).toBeVisible();
 
   await page.getByRole("button", { name: "Add expense" }).click();
   await expect(page.getByLabel("Amount in rupees")).toBeFocused();
@@ -47,8 +69,7 @@ test("local trip flows stay fast, traceable, responsive, and theme-safe", async 
   await expect(page.getByRole("button", { name: "Attach proof" })).toBeVisible();
   await page.getByRole("button", { name: "Close" }).click();
 
-  await page.getByRole("tab", { name: "Expenses" }).click();
-  await expect(page.getByText("Proof 1", { exact: true })).toBeVisible();
+  // Proof survives a round trip and its blob is reclaimed when removed.
   await page.getByRole("button", { name: /Hotel, two nights/ }).click();
   await expect(page.getByText("Proof attached", { exact: true })).toBeVisible();
   await expect(page.locator(".proof-gallery img")).toHaveCount(1);
@@ -63,46 +84,38 @@ test("local trip flows stay fast, traceable, responsive, and theme-safe", async 
   await page.getByRole("button", { name: /Hotel, two nights/ }).click();
   await expect(page.getByText("No proof attached", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Close" }).click();
-  await expect.poll(() => page.evaluate(async () => {
-    const request = indexedDB.open("settld", 1);
-    const database = await new Promise((resolve, reject) => {
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
-    });
-    const transaction = database.transaction("attachments", "readonly");
-    const count = transaction.objectStore("attachments").count();
-    return new Promise((resolve, reject) => {
-      count.onsuccess = () => resolve(count.result);
-      count.onerror = () => reject(count.error);
-    });
-  })).toBe(0);
+  await expect.poll(() => attachmentCount(page)).toBe(0);
 
-  await page.getByRole("tab", { name: "Balances" }).click();
-  await expect(page.getByText("You get back", { exact: true })).toBeVisible();
-  await expect(page.getByText("Gets ₹2,078.95", { exact: true })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Smart settle" })).toBeVisible();
+  await page.getByRole("button", { name: "Settle up" }).click();
   await expect(page.getByText("3 transfers clear every current balance", { exact: false })).toBeVisible();
   await page.getByRole("button", { name: "Record" }).first().click();
   await expect(page.getByRole("heading", { name: "Record payment" })).toBeVisible();
   await expect(page.getByText(/Record this only after .* confirms the payment/)).toBeVisible();
   await page.getByRole("button", { name: "Close" }).click();
 
-  await page.getByRole("button", { name: "Trip summary" }).click();
+  // Summary and history moved behind the group menu.
+  await page.getByRole("button", { name: "Group menu" }).click();
+  await page.getByRole("button", { name: /Trip summary/ }).click();
   await expect(page.getByRole("img", { name: "Group spend by category" })).toBeVisible();
-  await expect(page.getByText("Category spend, contribution, and balance are shown separately so the numbers stay truthful.")).toBeVisible();
   await page.getByRole("button", { name: "Close" }).click();
 
-  await page.getByRole("tab", { name: "Trail" }).click();
+  await page.getByRole("button", { name: "Group menu" }).click();
+  await page.getByRole("button", { name: /^History/ }).click();
   await expect(page.getByText("Nothing is silently overwritten", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Back" }).click();
+  await page.getByRole("button", { name: "Close" }).click();
 
-  await page.getByRole("link", { name: "Settlements" }).click();
-  await expect(page.getByRole("heading", { name: "Settlements" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Record" })).toHaveCount(3);
+  await page.getByRole("button", { name: "Back to groups" }).click();
+  await page.getByRole("link", { name: "Friends" }).click();
+  await expect(page.getByRole("heading", { name: "Friends" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Ishita/ })).toBeVisible();
 
   await page.getByRole("link", { name: "You" }).click();
   await page.getByRole("button", { name: "Light" }).click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  await page.getByRole("button", { name: "Azure" }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-accent", "azure");
+  await page.reload();
+  await expect(page.locator("html")).toHaveAttribute("data-accent", "azure");
   await page.getByRole("button", { name: "Dark" }).click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
 
@@ -117,7 +130,6 @@ test("local trip flows stay fast, traceable, responsive, and theme-safe", async 
 
   await page.setViewportSize({ width: 320, height: 720 });
   await page.getByRole("button", { name: /Ahmedabad trip/ }).click();
-  await page.getByRole("tab", { name: "Expenses" }).click();
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await expect(page.getByRole("button", { name: "Add expense" })).toBeVisible();
 
@@ -135,22 +147,65 @@ test("first run still works when Firebase cannot load", async ({ page }) => {
 });
 
 test("recorded payments can be reversed without rewriting history", async ({ page }) => {
-  await page.goto("/");
-  await continueLocally(page);
-  await page.getByLabel("Your name").fill("Ledger tester");
-  await page.getByRole("button", { name: "Get started" }).click();
-  await page.getByRole("button", { name: "Explore a sample trip" }).click();
-  await page.getByRole("tab", { name: "Balances" }).click();
+  await startWith(page, "Ledger tester");
 
+  await page.getByRole("button", { name: "Settle up" }).click();
   await page.getByRole("button", { name: "Record" }).first().click();
   await page.getByRole("button", { name: "Mark as paid" }).click();
-  const paymentRow = page.locator(".balances-tab").getByRole("button", { name: / paid / }).last();
+
+  await page.getByRole("button", { name: "Settle up" }).click();
+  const paymentRow = page.getByRole("button", { name: / paid / }).last();
   await expect(paymentRow).toBeVisible();
   await paymentRow.click();
   await expect(page.getByRole("heading", { name: "Payment record" })).toBeVisible();
   await page.getByRole("button", { name: "Reverse this payment" }).click();
   await page.getByRole("button", { name: "Tap again to confirm" }).click();
+
+  await page.getByRole("button", { name: "Settle up" }).click();
   await expect(page.getByText("Reversed", { exact: true })).toBeVisible();
+});
+
+test("sharing a group asks for an account before handing out a link", async ({ page }) => {
+  await startWith(page, "Host");
+
+  await page.getByRole("button", { name: "Group menu" }).click();
+  await page.getByRole("button", { name: /Share this group/ }).click();
+  // Signed out there is nothing to share into yet, so no link is offered.
+  await expect(page.getByRole("button", { name: "Sign in to share" })).toBeVisible();
+  await expect(page.locator(".invite-code")).toHaveCount(0);
+});
+
+test("an invite link resolves to a join screen that needs an account", async ({ page }) => {
+  await startWith(page, "Guest");
+  const gid = await page.evaluate(() => location.hash.replace("#/group/", ""));
+
+  await page.goto(`/#/join/${gid}`);
+  // Already a member of this local group, so it just opens.
+  await expect(page.getByRole("heading", { name: "Ahmedabad trip" })).toBeVisible();
+
+  await page.goto("/#/join/some-other-group-id");
+  await expect(page.getByRole("heading", { name: "Join group" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Sign in", exact: true })).toBeVisible();
+});
+
+test("a local-only group never touches the shared path", async ({ page }) => {
+  await startWith(page, "Local only");
+  const group = await page.evaluate(async () => {
+    const request = indexedDB.open("settld", 1);
+    const database = await new Promise((resolve, reject) => {
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    const transaction = database.transaction("groups", "readonly");
+    const all = transaction.objectStore("groups").getAll();
+    return new Promise((resolve, reject) => {
+      all.onsuccess = () => resolve(all.result[0]);
+      all.onerror = () => reject(all.error);
+    });
+  });
+  expect(group.shared).toBeUndefined();
+  expect(group.memberUids).toBeUndefined();
+  expect(group.members.some((m) => m.isYou)).toBe(true);
 });
 
 test("legacy local profiles are migrated before cloud backup", async ({ page }) => {
@@ -183,7 +238,15 @@ test("legacy local profiles are migrated before cloud backup", async ({ page }) 
       get.onerror = () => reject(get.error);
     });
   });
-  expect(profile).toMatchObject({ name: "Legacy user", upi: "legacy@upi", theme: "dark" });
+  // accent and phone must be filled in, otherwise the deployed rules reject
+  // the backup write for having the wrong key set.
+  expect(profile).toMatchObject({
+    name: "Legacy user",
+    upi: "legacy@upi",
+    phone: "",
+    theme: "dark",
+    accent: "coral",
+  });
   expect(Number.isInteger(profile.updatedAt)).toBe(true);
 });
 
@@ -194,7 +257,8 @@ test("signed-out hard deletes leave a durable local tombstone", async ({ page })
   await page.getByLabel("Your name").fill("Delete tester");
   await page.getByRole("button", { name: "Get started" }).click();
   await page.getByRole("button", { name: "Explore a sample trip" }).click();
-  await page.getByRole("button", { name: "Group settings" }).click();
+  await page.getByRole("button", { name: "Group menu" }).click();
+  await page.getByRole("button", { name: /Group settings/ }).click();
   await page.getByRole("button", { name: "Delete group" }).click();
   await page.getByRole("button", { name: "Tap again to confirm" }).click();
   await expect(page.getByRole("heading", { name: "Groups" })).toBeVisible();

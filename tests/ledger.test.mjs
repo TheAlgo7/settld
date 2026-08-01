@@ -39,14 +39,19 @@ t("legacy profiles migrate to the cloud-safe shape", () => {
   assert.deepEqual(normalizeProfile({ name: "Gaurav", upi: "g@upi", extra: true }, 1234), {
     name: "Gaurav",
     upi: "g@upi",
+    phone: "",
     theme: "dark",
+    accent: "coral",
     updatedAt: 1234,
   });
-  const current = { name: "Gaurav", upi: "", theme: "light", updatedAt: 99 };
+  const current = { name: "Gaurav", upi: "", phone: "", theme: "light", accent: "azure", updatedAt: 99 };
   assert.deepEqual(normalizeProfile(current, 1234), current);
-  const bounded = normalizeProfile({ name: "n".repeat(500), upi: "u".repeat(500), theme: "dark" }, 1);
+  const bounded = normalizeProfile({ name: "n".repeat(500), upi: "u".repeat(500), phone: "9".repeat(80), theme: "dark" }, 1);
   assert.equal(bounded.name.length, LIMITS.profileName);
   assert.equal(bounded.upi.length, LIMITS.upi);
+  assert.equal(bounded.phone.length, LIMITS.phone);
+  // An unknown accent must fall back rather than reach Firestore and be rejected.
+  assert.equal(normalizeProfile({ name: "G", accent: "neon" }, 1).accent, "coral");
 });
 
 t("legacy ledger text is bounded without dropping references", () => {

@@ -5,6 +5,124 @@ service cloud.firestore {
       return request.auth != null && request.auth.uid == uid;
     }
 
+    // ---- shared groups ----
+    //
+    // A group id is an unguessable UUID and the invite link carries it, so the
+    // trust boundary is "whoever holds the link". Any signed-in holder may read
+    // the group document and add themselves once; from then on membership is
+    // what gates the ledger underneath. Members trust each other with the
+    // ledger the same way they already do in person.
+
+    function groupOf(gid) {
+      return get(/databases/$(database)/documents/groups/$(gid)).data;
+    }
+
+    function memberOfGroup(gid) {
+      return request.auth != null && request.auth.uid in groupOf(gid).memberUids;
+    }
+
+    match /groups/{gid} {
+      function shapeOk() {
+        return request.resource.data.keys().hasOnly(
+            ['id', 'name', 'emoji', 'currency', 'members', 'memberUids', 'ownerUid', 'createdAt', 'updatedAt'])
+          && request.resource.data.id == gid
+          && request.resource.data.name is string
+          && request.resource.data.name.size() <= 160
+          && request.resource.data.members is list
+          && request.resource.data.members.size() <= 100
+          && request.resource.data.memberUids is list
+          && request.resource.data.memberUids.size() <= 100
+          && request.resource.data.ownerUid is string
+          && request.resource.data.updatedAt is int;
+      }
+
+      function isMember() {
+        return request.auth != null && request.auth.uid in resource.data.memberUids;
+      }
+
+      // Joining may only append the caller's own uid and at most one member
+      // row. It can never rename the owner or drop anybody.
+      function selfJoin() {
+        return request.auth != null
+          && !(request.auth.uid in resource.data.memberUids)
+          && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['memberUids', 'members', 'updatedAt'])
+          && request.resource.data.memberUids.hasAll(resource.data.memberUids)
+          && request.resource.data.memberUids.size() == resource.data.memberUids.size() + 1
+          && request.auth.uid in request.resource.data.memberUids
+          && request.resource.data.ownerUid == resource.data.ownerUid
+          && request.resource.data.members.size() >= resource.data.members.size()
+          && request.resource.data.members.size() <= resource.data.members.size() + 1;
+      }
+
+      // A holder of the link needs the name and people before deciding to join.
+      allow get: if request.auth != null;
+      allow list: if false;
+      allow create: if request.auth != null
+        && shapeOk()
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.memberUids == [request.auth.uid];
+      allow update: if (isMember() && shapeOk() && request.resource.data.ownerUid == resource.data.ownerUid)
+        || selfJoin();
+      allow delete: if request.auth != null && request.auth.uid == resource.data.ownerUid;
+    }
+
+    match /groups/{gid}/expenses/{id} {
+      allow read, delete: if memberOfGroup(gid);
+      allow create, update: if memberOfGroup(gid)
+        && request.resource.data.keys().hasOnly(['id', 'groupId', 'createdAt', 'updatedAt', 'deleted', 'desc', 'amountP', 'category', 'date', 'payers', 'split', 'attachments', 'notes'])
+        && request.resource.data.id == id
+        && request.resource.data.groupId == gid
+        && request.resource.data.desc is string
+        && request.resource.data.desc.size() <= 300
+        && request.resource.data.amountP is int
+        && request.resource.data.amountP > 0
+        && request.resource.data.attachments is list
+        && request.resource.data.attachments.size() <= 100
+        && request.resource.data.notes is string
+        && request.resource.data.notes.size() <= 1000;
+    }
+
+    match /groups/{gid}/settlements/{id} {
+      allow read, delete: if memberOfGroup(gid);
+      allow create, update: if memberOfGroup(gid)
+        && request.resource.data.keys().hasOnly(['id', 'groupId', 'fromId', 'toId', 'amountP', 'note', 'attachments', 'createdAt', 'updatedAt', 'deleted'])
+        && request.resource.data.id == id
+        && request.resource.data.groupId == gid
+        && request.resource.data.amountP is int
+        && request.resource.data.amountP > 0
+        && request.resource.data.note is string
+        && request.resource.data.note.size() <= 500
+        && request.resource.data.attachments is list
+        && request.resource.data.attachments.size() <= 100;
+    }
+
+    match /groups/{gid}/events/{id} {
+      allow read: if memberOfGroup(gid);
+      // History is append-only for everyone, including the group owner.
+      allow create: if memberOfGroup(gid)
+        && request.resource.data.keys().hasOnly(['id', 'groupId', 'ts', 'actor', 'type', 'summary', 'data'])
+        && request.resource.data.id == id
+        && request.resource.data.groupId == gid
+        && request.resource.data.summary is string
+        && request.resource.data.summary.size() <= 1000;
+      allow update, delete: if false;
+    }
+
+    match /groups/{gid}/attachments/{id} {
+      allow read, delete: if memberOfGroup(gid);
+      allow create, update: if memberOfGroup(gid)
+        && request.resource.data.keys().hasOnly(['id', 'mime', 'name', 'ts', 'b64'])
+        && request.resource.data.id == id
+        && request.resource.data.mime is string
+        && request.resource.data.name is string
+        && request.resource.data.name.size() <= 300
+        && request.resource.data.b64 is string
+        && request.resource.data.b64.size() <= 900000;
+    }
+
+    // ---- personal per-uid backup (unchanged) ----
+
     match /users/{uid}/groups/{id} {
       allow read, delete: if owns(uid);
       allow create, update: if owns(uid)
@@ -82,12 +200,15 @@ service cloud.firestore {
     match /users/{uid}/meta/profile {
       allow read, delete: if owns(uid);
       allow create, update: if owns(uid)
-        && request.resource.data.keys().hasOnly(['name', 'upi', 'theme', 'updatedAt'])
+        && request.resource.data.keys().hasOnly(['name', 'upi', 'phone', 'theme', 'accent', 'updatedAt'])
         && request.resource.data.name is string
         && request.resource.data.name.size() <= 120
         && request.resource.data.upi is string
         && request.resource.data.upi.size() <= 200
+        && request.resource.data.phone is string
+        && request.resource.data.phone.size() <= 24
         && request.resource.data.theme in ['dark', 'light', 'system']
+        && request.resource.data.accent in ['coral', 'amber', 'mint', 'azure', 'violet', 'rose']
         && request.resource.data.updatedAt is int;
     }
 

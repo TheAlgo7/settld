@@ -8,7 +8,11 @@ Physical scene: a friend adds a restaurant bill one-handed at 10pm, then another
 
 ## Color strategy
 
-Restrained product palette. Coral appears on primary actions, current selection, focus, and the brand mark. It is not a debt color.
+Restrained product palette. The accent appears on primary actions, current selection, focus, and the brand mark. It is never a debt color.
+
+The accent is user-selectable: `coral` (default), `amber`, `mint`, `azure`, `violet`, `rose`. Each is declared twice, once per theme, because a fill that carries dark ink on near-black needs to be darker to carry light ink on warm paper. Components read `--accent`, `--accent-text` (on-background, for status copy) and `--accent-ink` (on-fill) and never hard-code a hue.
+
+Because the accent can become green, meaning never rests on it. `--pos` stays a fixed green and every balance is also stated in words (`You owe`, `owes you`, `you lent`) with a sign.
 
 ### Dark theme
 
@@ -38,8 +42,7 @@ Filled coral, success, danger, and warning controls use dark ink. Warm paper tex
 
 ## Typography
 
-- Display and headings: `Space Grotesk`, system sans fallback.
-- Body, controls, labels, and money: `Inter`, system sans fallback.
+- One family carries the interface: `Inter`, system sans fallback, for headings, controls, labels, and money. `Space Grotesk` is reserved for the Settld wordmark and never used on data or UI labels.
 - Screen title: 36px / 700 / 1.05 / -0.035em.
 - Section title: 22px / 650 / 1.2 / -0.02em.
 - Row title: 16px / 650 / 1.3.
@@ -62,7 +65,7 @@ Filled coral, success, danger, and warning controls use dark ink. Warm paper tex
 
 ## Elevation and glass
 
-Use borders and tonal separation first. Shadows are soft and low-chroma. The floating dock and compact collapsed app bar are the only translucent surfaces. Sheets, cards, inputs, and menus are opaque.
+Records sit directly on the page surface, separated by hairlines, not stacked in cards. A card is only correct when something genuinely needs lifting off the page, and cards are never nested. Shadows are soft and low-chroma. The floating dock and the compact collapsed app bar are the only translucent surfaces. Sheets, inputs, and menus are opaque.
 
 ## Brand mark
 
@@ -72,9 +75,9 @@ The mark is a flat coral loop that reads as an abstract `S`, with a coral check 
 
 ### App shell
 
-- Global destinations: Groups, Activity, Settlements, You.
-- Group destinations: Overview, Expenses, Balances, Trail.
-- `Add expense` is a contextual action, not a navigation destination.
+- Global destinations: Groups, Friends, Activity, You.
+- A group is a single scrolling screen, never tabs: identity, your position, the settle plan as `X owes you` rows, then the expense list by day. Everything else (people, invite, trip summary, history, settings) hangs off one group menu.
+- `Settle up` and `Add expense` sit together directly under the balance. There is no floating action button.
 - Large in-flow title collapses to a compact app bar after scrolling.
 
 ### Grouped records

@@ -1,5 +1,6 @@
-// Settld UI. Proof-first coral product system with large headers, grouped
-// records, bottom sheets, and a restrained floating dock. Plain DOM only.
+// Settld UI. One screen per group: your position, who owes whom, then the
+// expenses. Everything secondary (summary, history, members, invites) hangs
+// off the group menu instead of competing for a tab. Plain DOM only.
 
 import * as store from "./store.js";
 import * as cloud from "./cloud.js";
@@ -20,13 +21,24 @@ const CATS = [
 const catOf = (id) => CATS.find((c) => c.id === id) ?? CATS[CATS.length - 1];
 const GROUP_EMOJIS = ["🏝️", "🏠", "🍕", "🎉", "✈️", "🎬", "🏔️", "💼"];
 
+// Swatch fills live in CSS so they track the theme; this list only names them.
+const ACCENTS = [
+  { id: "coral", label: "Coral" },
+  { id: "amber", label: "Amber" },
+  { id: "mint", label: "Mint" },
+  { id: "azure", label: "Azure" },
+  { id: "violet", label: "Violet" },
+  { id: "rose", label: "Rose" },
+];
+
 const I = {
   groups: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="14" rx="3"/><path d="M7.5 9.5h9M7.5 13.5h6"/></svg>',
+  friends: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.3"/><path d="M2.8 19.2c.45-3.5 2.6-5.2 6.2-5.2s5.75 1.7 6.2 5.2"/><path d="M16.2 5.1a3.1 3.1 0 0 1 0 5.8M18.4 19.2c-.2-2.1-.85-3.6-2.1-4.5"/></svg>',
   pulse: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 12h4L10 5.5l4 13 2.5-6.5h4"/></svg>',
   settle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7.5h11.5M13.5 4.5l3 3-3 3M19 16.5H7.5M10.5 13.5l-3 3 3 3"/></svg>',
   user: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.5"/><path d="M5.5 20c.5-4 2.8-6 6.5-6s6 2 6.5 6"/></svg>',
   chart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a9 9 0 1 0 9 9h-9Z"/><path d="M15 3.5A7.5 7.5 0 0 1 20.5 9H15Z"/></svg>',
-  sliders: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/><circle cx="15" cy="7" r="2.4" fill="var(--surface)"/><circle cx="9" cy="12" r="2.4" fill="var(--surface)"/><circle cx="16" cy="17" r="2.4" fill="var(--surface)"/></svg>',
+  more: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="19" r="1.7"/></svg>',
   plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
   chevL: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 5.5 8 12l6.5 6.5"/></svg>',
   chevR: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 5.5 16 12l-6.5 6.5"/></svg>',
@@ -40,6 +52,10 @@ const I = {
   receipt: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 3.5h11V20l-2.2-1.5-2.1 1.5-2.2-1.5-2.1 1.5-2.4-1.5z"/><path d="M9.5 8.5h5M9.5 12h5"/></svg>',
   arrowR: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h13M13 6.5 19 12l-6 5.5"/></svg>',
   upi: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M8.5 7H17v8.5"/></svg>',
+  link: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.5.5l3-3A5 5 0 0 0 13.5 3.5l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3A5 5 0 0 0 10.5 20.5l1.7-1.7"/></svg>',
+  people: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.3"/><path d="M2.8 19.2c.45-3.5 2.6-5.2 6.2-5.2s5.75 1.7 6.2 5.2"/><path d="M16.2 5.1a3.1 3.1 0 0 1 0 5.8M18.4 19.2c-.2-2.1-.85-3.6-2.1-4.5"/></svg>',
+  sliders: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/><circle cx="15" cy="7" r="2.4" fill="var(--bg)"/><circle cx="9" cy="12" r="2.4" fill="var(--bg)"/><circle cx="16" cy="17" r="2.4" fill="var(--bg)"/></svg>',
+  history: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1M3.5 4.5V10h5.5"/><path d="M12 7.5V12l3 1.8"/></svg>',
 };
 const evIcon = { expense: "receipt", edit: "pen", delete: "trash", settle: "check", member: "plus", group: "plus" };
 
@@ -97,11 +113,12 @@ function initials(name) {
 }
 const avatarHtml = (m, cls = "") => {
   const name = m?.name ?? "?";
-  return `<span class="avatar ${cls}" style="background:hsl(${hueOf(name)} 42% 26%)">${esc(initials(name))}</span>`;
+  return `<span class="avatar ${cls}" style="background:hsl(${hueOf(name)} 42% 30%)">${esc(initials(name))}</span>`;
 };
 const avatarStackHtml = (members) =>
   `<span class="avatar-stack">${members.slice(0, 4).map((m) => avatarHtml(m, "sm")).join("")}${members.length > 4 ? `<span class="avatar sm avatar-more">+${members.length - 4}</span>` : ""}</span>`;
 const displayName = (m) => (m?.isYou ? "You" : (m?.name ?? "?"));
+const nameList = (members) => members.map((m) => displayName(m)).join(", ");
 
 let toastTimer;
 function toast(msg) {
@@ -109,7 +126,7 @@ function toast(msg) {
   t.textContent = msg;
   t.classList.add("show");
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.classList.remove("show"), 2400);
+  toastTimer = setTimeout(() => t.classList.remove("show"), 2600);
 }
 
 /* attachment blob -> object URL cache */
@@ -136,7 +153,7 @@ function groupCalc(g) {
   return { exps, setts, bal, spend: totalSpend(exps) };
 }
 
-/* ---------- theme ---------- */
+/* ---------- theme + accent ---------- */
 
 function applyTheme(pref) {
   const resolved =
@@ -144,9 +161,16 @@ function applyTheme(pref) {
       ? (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark")
       : pref || "dark";
   document.documentElement.dataset.theme = resolved;
-  $('meta[name="theme-color"]').setAttribute("content", resolved === "light" ? "#F3F0EA" : "#090A0B");
+  $('meta[name="theme-color"]').setAttribute("content", resolved === "light" ? "#F5F2EC" : "#0B0C0D");
   localStorage.setItem("settld-theme", pref || "dark");
 }
+
+function applyAccent(id) {
+  const accent = ACCENTS.find((a) => a.id === id) ?? ACCENTS[0];
+  document.documentElement.dataset.accent = accent.id;
+  localStorage.setItem("settld-accent", accent.id);
+}
+
 matchMedia("(prefers-color-scheme: light)").addEventListener("change", () => {
   if ((store.state.profile?.theme ?? "dark") === "system") applyTheme("system");
 });
@@ -245,10 +269,7 @@ function openSheet({ title, body, footer, locked = false, onClose }) {
 
 function closeSheet(viaPop = false, then) {
   const top = sheetStack[sheetStack.length - 1];
-  if (!top || top.locked) {
-    if (top?.locked) return;
-    return;
-  }
+  if (!top || top.locked) return;
   sheetStack.pop();
   top.wrap.inert = true;
   top.wrap.setAttribute("aria-hidden", "true");
@@ -313,6 +334,23 @@ function openViewer(url, { onRemove } = {}) {
   openSheet({ title: "Proof", body, footer });
 }
 
+// A plain action list used by the group menu and other pick-one sheets.
+function menuSheet(title, items) {
+  const body = el(`<div class="list"></div>`);
+  for (const item of items) {
+    if (!item) continue;
+    const row = el(`<button class="row pressable">
+      <span class="tile">${I[item.icon] ?? I.chevR}</span>
+      <span class="grow"><span class="ttl${item.danger ? " danger-text" : ""}">${esc(item.label)}</span>
+        ${item.cap ? `<span class="cap">${esc(item.cap)}</span>` : ""}</span>
+      <span class="chev">${I.chevR}</span>
+    </button>`);
+    row.addEventListener("click", () => closeSheet(false, item.run));
+    body.append(row);
+  }
+  openSheet({ title, body });
+}
+
 /* ---------- appbar + dock ---------- */
 
 function setAppbar({ title, left, right }) {
@@ -338,8 +376,8 @@ addEventListener("scroll", () => {
 function initDock() {
   const tabs = {
     home: ["Groups", I.groups],
+    friends: ["Friends", I.friends],
     activity: ["Activity", I.pulse],
-    settlements: ["Settlements", I.settle],
     settings: ["You", I.user],
   };
   for (const a of document.querySelectorAll("#dock a")) {
@@ -350,14 +388,14 @@ function initDock() {
 
 /* ---------- router ---------- */
 
-const ui = { groupTab: new Map() };
 let lastRouteKey = "";
 
 function parseRoute() {
   const h = location.hash.replace(/^#\/?/, "");
   if (h.startsWith("group/")) return { name: "group", id: h.slice(6) };
+  if (h.startsWith("join/")) return { name: "join", code: h.slice(5) };
+  if (h === "friends") return { name: "friends" };
   if (h === "activity") return { name: "activity" };
-  if (h === "settlements") return { name: "settlements" };
   if (h === "settings") return { name: "settings" };
   return { name: "home" };
 }
@@ -365,7 +403,7 @@ function parseRoute() {
 function render() {
   if (!store.state.ready) return;
   const route = parseRoute();
-  const key = route.name + (route.id ?? "");
+  const key = route.name + (route.id ?? route.code ?? "");
   const keepScroll = key === lastRouteKey;
   const y = scrollY;
   lastRouteKey = key;
@@ -373,8 +411,9 @@ function render() {
   const screen = document.getElementById("screen");
   let view;
   if (route.name === "group") view = GroupScreen(route.id);
+  else if (route.name === "join") view = JoinScreen(route.code);
+  else if (route.name === "friends") view = FriendsScreen();
   else if (route.name === "activity") view = ActivityScreen();
-  else if (route.name === "settlements") view = SettlementsScreen();
   else if (route.name === "settings") view = SettingsScreen();
   else view = HomeScreen();
 
@@ -383,7 +422,7 @@ function render() {
   hydrate(view);
 
   const dock = $("#dock");
-  dock.classList.toggle("off", route.name === "group");
+  dock.classList.toggle("off", route.name === "group" || route.name === "join");
   for (const a of dock.querySelectorAll("a")) {
     const active = a.dataset.tab === (route.name === "home" ? "home" : route.name);
     a.classList.toggle("on", active);
@@ -397,7 +436,7 @@ addEventListener("hashchange", render);
 addEventListener("online", render);
 addEventListener("offline", render);
 
-/* ---------- screens ---------- */
+/* ---------- sync status ---------- */
 
 function syncState() {
   const status = cloud.backupStatus();
@@ -413,16 +452,18 @@ function syncState() {
   return { label: "On this device", cls: "local", detail: "This ledger currently lives on this device." };
 }
 
+/* ---------- home ---------- */
+
 function HomeScreen() {
   const name = store.state.profile?.name?.split(/\s+/)[0] ?? "there";
   const sync = syncState();
   let overall = 0;
   const rows = store.state.groups.map((g) => {
     const you = store.youOf(g);
-    const { bal, spend, exps } = groupCalc(g);
+    const { bal, exps } = groupCalc(g);
     const net = bal.get(you?.id) ?? 0;
     overall += net;
-    return { g, net, spend, count: exps.length };
+    return { g, net, count: exps.length };
   });
 
   const sub =
@@ -433,21 +474,19 @@ function HomeScreen() {
       : overall === 0
         ? "Everything is clear. Hisab barabar."
         : overall > 0
-          ? `Across your groups, you get <b class="pos money">${fmt(overall)}</b>`
-          : `Across your groups, you owe <b class="money">${fmt(-overall)}</b>`;
+          ? `Overall you get back <b class="pos money">${fmt(overall)}</b>`
+          : `Overall you owe <b class="money">${fmt(-overall)}</b>`;
 
-  const view = el(`<div class="screen-home">
-    <div class="display home-display">
-      <div class="brand-line"><span class="brand-symbol">${MARK}</span><span class="brand-name">Settld</span>
-        <span class="device-status ${sync.cls}"><i></i>${sync.label}</span></div>
-      <h1>Groups</h1><div class="sub">${sub}</div>
-    </div>
+  const view = el(`<div>
+    <div class="brand-line"><span class="brand-symbol">${MARK}</span><span class="brand-name">Settld</span>
+      <span class="device-status ${sync.cls}"><i></i>${sync.label}</span></div>
+    <div class="display"><h1>Groups</h1><div class="sub">${sub}</div></div>
     <div class="home-body"></div>
   </div>`);
   const body = $(".home-body", view);
 
   if (!rows.length) {
-    const empty = el(`<div class="empty empty-first-group">
+    const empty = el(`<div class="empty">
       <div class="mark">${MARK}</div>
       <h3>Your first shared ledger</h3>
       <p>Create one for a trip, a flat, or tonight's dinner. Every receipt and edit stays with the expense.</p>
@@ -463,8 +502,8 @@ function HomeScreen() {
     });
     body.append(empty);
   } else {
-    const list = el(`<div class="list group-list" style="margin-top:26px"></div>`);
-    for (const { g, net, spend, count } of rows) {
+    const list = el(`<div class="list ruled" style="margin-top:22px"></div>`);
+    for (const { g, net, count } of rows) {
       const endHtml =
         net === 0
           ? `<span class="balance-label">All settled</span>`
@@ -472,17 +511,16 @@ function HomeScreen() {
             ? `<span class="balance-label">You get</span><span class="amt money pos">${fmt(net)}</span>`
             : `<span class="balance-label">You owe</span><span class="amt money debt">${fmt(-net)}</span>`;
       const row = el(`<button class="row group-row pressable">
-        <span class="tile group-tile">${esc(g.emoji ?? "🧾")}</span>
+        <span class="tile">${esc(g.emoji ?? "🧾")}</span>
         <span class="grow"><span class="ttl">${esc(g.name)}</span>
-          <span class="cap">${g.members.length} members · ${count} expense${count === 1 ? "" : "s"}</span></span>
+          <span class="cap">${g.members.length} people · ${count} expense${count === 1 ? "" : "s"}</span></span>
         <span class="end">${endHtml}</span>
-        <span class="chev">${I.chevR}</span>
       </button>`);
       row.addEventListener("click", () => (location.hash = `#/group/${g.id}`));
       list.append(row);
     }
     body.append(list);
-    const nb = el(`<button class="btn primary home-new">${I.plus} New group</button>`);
+    const nb = el(`<button class="btn ghost" style="margin-top:22px">${I.plus} New group</button>`);
     nb.addEventListener("click", () => newGroupSheet());
     body.append(nb);
   }
@@ -491,10 +529,109 @@ function HomeScreen() {
   return view;
 }
 
+/* ---------- friends ---------- */
+
+// People are still per-group records, so friends are matched on normalised
+// name. Once members carry an account id this keys on that instead.
+function friendIndex() {
+  const map = new Map();
+  for (const g of store.state.groups) {
+    const you = store.youOf(g);
+    const { bal } = groupCalc(g);
+    for (const m of g.members) {
+      if (m.id === you?.id) continue;
+      const key = m.name.trim().toLowerCase();
+      if (!key) continue;
+      const entry = map.get(key) ?? { name: m.name, net: 0, groups: [] };
+      // Their balance is the mirror of what they owe you inside this group.
+      const theirs = bal.get(m.id) ?? 0;
+      entry.net -= theirs;
+      entry.groups.push({ g, amount: -theirs });
+      map.set(key, entry);
+    }
+  }
+  return [...map.values()].sort((a, b) => Math.abs(b.net) - Math.abs(a.net));
+}
+
+function FriendsScreen() {
+  const friends = friendIndex();
+  const owed = friends.reduce((n, f) => n + Math.max(0, f.net), 0);
+  const owing = friends.reduce((n, f) => n + Math.max(0, -f.net), 0);
+
+  const view = el(`<div>
+    <div class="display"><h1>Friends</h1>
+      <div class="sub">${friends.length ? "Everyone you share a group with, netted across all of them." : "People you share groups with show up here."}</div></div>
+    <div class="friends-body"></div>
+  </div>`);
+  const body = $(".friends-body", view);
+
+  if (!friends.length) {
+    body.append(el(`<div class="empty"><h3>No one yet</h3><p>Add people to a group and their running balance with you appears here.</p></div>`));
+  } else {
+    if (owed || owing) {
+      body.append(el(`<div class="summary-metrics" style="margin-top:20px">
+        <div><span>You get back</span><strong class="money pos">${fmt(owed)}</strong></div>
+        <div><span>You owe</span><strong class="money debt">${fmt(owing)}</strong></div>
+      </div>`));
+    }
+    const list = el(`<div class="list" style="margin-top:8px"></div>`);
+    for (const f of friends) {
+      const endHtml =
+        f.net === 0
+          ? `<span class="balance-label">Settled</span>`
+          : f.net > 0
+            ? `<span class="balance-label">Owes you</span><span class="amt money pos">${fmt(f.net)}</span>`
+            : `<span class="balance-label">You owe</span><span class="amt money debt">${fmt(-f.net)}</span>`;
+      const row = el(`<button class="row pressable">
+        ${avatarHtml(f)}
+        <span class="grow"><span class="ttl">${esc(f.name)}</span>
+          <span class="cap">${f.groups.length} group${f.groups.length === 1 ? "" : "s"}</span></span>
+        <span class="end">${endHtml}</span>
+      </button>`);
+      row.addEventListener("click", () => friendSheet(f));
+      list.append(row);
+    }
+    body.append(list);
+  }
+
+  setAppbar({ title: "Friends" });
+  return view;
+}
+
+function friendSheet(friend) {
+  const body = el(`<div>
+    <div class="money-block" style="margin-top:4px">
+      <div class="lbl">${friend.net === 0 ? "Between you" : friend.net > 0 ? `${esc(friend.name)} owes you` : `You owe ${esc(friend.name)}`}</div>
+      <div class="val money ${friend.net > 0 ? "pos" : friend.net < 0 ? "debt" : ""}">${friend.net === 0 ? "All clear" : fmt(Math.abs(friend.net))}</div>
+    </div>
+    <div class="section-cap">Group by group</div>
+    <div class="list ruled friend-groups"></div>
+  </div>`);
+  const list = $(".friend-groups", body);
+  for (const { g, amount } of friend.groups) {
+    const endHtml =
+      amount === 0
+        ? `<span class="balance-label">Settled</span>`
+        : amount > 0
+          ? `<span class="balance-label">Owes you</span><span class="amt money pos">${fmt(amount)}</span>`
+          : `<span class="balance-label">You owe</span><span class="amt money debt">${fmt(-amount)}</span>`;
+    const row = el(`<button class="row pressable">
+      <span class="tile">${esc(g.emoji ?? "🧾")}</span>
+      <span class="grow"><span class="ttl">${esc(g.name)}</span></span>
+      <span class="end">${endHtml}</span>
+    </button>`);
+    row.addEventListener("click", () => closeSheet(false, () => (location.hash = `#/group/${g.id}`)));
+    list.append(row);
+  }
+  openSheet({ title: friend.name, body });
+}
+
+/* ---------- activity ---------- */
+
 function ActivityScreen() {
   const events = store.allEvents();
-  const view = el(`<div class="screen-activity">
-    <div class="display"><h1>Activity</h1><div class="sub">Every add, edit, and payment stays visible.</div></div>
+  const view = el(`<div>
+    <div class="display"><h1>Activity</h1><div class="sub">Every add, edit and payment, newest first.</div></div>
     <div class="act-body"></div>
   </div>`);
   const body = $(".act-body", view);
@@ -504,58 +641,6 @@ function ActivityScreen() {
     body.append(trailList(events, true));
   }
   setAppbar({ title: "Activity" });
-  return view;
-}
-
-function SettlementsScreen() {
-  const groups = store.state.groups
-    .map((g) => {
-      const { bal } = groupCalc(g);
-      return { g, plan: simplify(bal) };
-    })
-    .filter(({ plan }) => plan.length);
-  const transfers = groups.reduce((n, item) => n + item.plan.length, 0);
-  const view = el(`<div class="screen-settlements">
-    <div class="display"><h1>Settlements</h1>
-      <div class="sub">${transfers ? `${transfers} transfer${transfers === 1 ? "" : "s"} can clear every current balance.` : "No payments are pending across your groups."}</div></div>
-    <div class="settlements-body"></div>
-  </div>`);
-  const body = $(".settlements-body", view);
-
-  if (!groups.length) {
-    body.append(el(`<div class="empty"><div class="settle-seal">${I.check}</div><h3>All clear</h3><p>When a group has money left to clear, the simplest payment plan will show up here.</p></div>`));
-  } else {
-    for (const { g, plan } of groups) {
-      const section = el(`<section class="settlement-group"><button class="section-heading link-heading"><div><h2>${esc(g.emoji ?? "🧾")} ${esc(g.name)}</h2><span class="section-cap">${plan.length} transfer${plan.length === 1 ? "" : "s"} to clear up</span></div><span class="chev">${I.chevR}</span></button><div class="list plain"></div></section>`);
-      $(".link-heading", section).addEventListener("click", () => {
-        ui.groupTab.set(g.id, "balances");
-        location.hash = `#/group/${g.id}`;
-      });
-      const list = $(".list", section);
-      const you = store.youOf(g);
-      for (const t of plan) {
-        const from = store.memberOf(g, t.fromId);
-        const to = store.memberOf(g, t.toId);
-        const relation =
-          from?.id === you?.id
-            ? `You pay ${displayName(to)}`
-            : to?.id === you?.id
-              ? `${displayName(from)} pays you`
-              : `${displayName(from)} pays ${displayName(to)}`;
-        const row = el(`<div class="row settle-row">
-          <span class="avatar-pair">${avatarHtml(from, "sm")}${avatarHtml(to, "sm")}</span>
-          <span class="grow"><span class="ttl">${esc(relation)}</span><span class="cap">Suggested by Smart settle</span></span>
-          <span class="end"><span class="amt money">${fmt(t.amountP)}</span></span>
-          <button class="btn secondary small">Record</button>
-        </div>`);
-        row.querySelector("button").addEventListener("click", () => settleSheet(g, t.fromId, t.toId, t.amountP));
-        list.append(row);
-      }
-      body.append(section);
-    }
-  }
-
-  setAppbar({ title: "Settlements" });
   return view;
 }
 
@@ -581,45 +666,304 @@ function trailList(events, showGroup = false) {
   return box;
 }
 
-function SettingsScreen() {
-  const p = store.state.profile ?? { name: "", upi: "", theme: "dark" };
-  const view = el(`<div class="screen-you">
-    <div class="display"><h1>You</h1><div class="sub">Profile, backup and preferences.</div></div>
+/* ---------- group screen ---------- */
 
-    <div class="section-cap">You</div>
-    <label class="cap-label" for="st-name">Your name</label>
+function GroupScreen(id) {
+  const g = store.groupById(id);
+  if (!g) {
+    location.hash = "#/";
+    return el("<div></div>");
+  }
+  const you = store.youOf(g);
+  const { exps, bal } = groupCalc(g);
+  const net = bal.get(you?.id) ?? 0;
+  const plan = simplify(bal);
+
+  const view = el(`<div>
+    <div class="group-title-line">
+      <span class="group-emoji">${esc(g.emoji ?? "🧾")}</span>
+      <h1>${esc(g.name)}</h1>
+    </div>
+    <div class="group-people">${avatarStackHtml(g.members)}<span>${esc(nameList(g.members))}</span></div>
+
+    <div class="money-block">
+      <div class="lbl">${net > 0 ? "You get back" : net < 0 ? "You owe" : "Your balance"}</div>
+      <div class="val money ${net > 0 ? "pos" : net < 0 ? "debt" : ""}">${net === 0 ? "All clear" : fmt(Math.abs(net))}</div>
+      <div class="note">${net === 0 ? "Hisab barabar. Nothing is pending in this group." : `${fmt(totalSpend(exps))} spent across ${exps.length} expense${exps.length === 1 ? "" : "s"}`}</div>
+    </div>
+
+    <div class="act-row">
+      <button class="btn primary g-settle">${I.settle} Settle up</button>
+      <button class="btn secondary g-add">${I.plus} Add expense</button>
+    </div>
+
+    <div class="g-owe"></div>
+    <div class="g-list"></div>
+  </div>`);
+
+  $(".g-add", view).addEventListener("click", () => expenseSheet(g));
+  const settleBtn = $(".g-settle", view);
+  if (!plan.length) settleBtn.disabled = true;
+  settleBtn.addEventListener("click", () => settleUpSheet(g));
+
+  // Who owes whom, straight from the settle plan so every line is actionable.
+  const oweBox = $(".g-owe", view);
+  if (plan.length) {
+    const list = el(`<div class="owe-list"></div>`);
+    const ordered = [...plan].sort((a, b) => {
+      const aYou = a.fromId === you?.id || a.toId === you?.id ? 0 : 1;
+      const bYou = b.fromId === you?.id || b.toId === you?.id ? 0 : 1;
+      return aYou - bYou || b.amountP - a.amountP;
+    });
+    for (const t of ordered) {
+      const from = store.memberOf(g, t.fromId);
+      const to = store.memberOf(g, t.toId);
+      const youGet = to?.id === you?.id;
+      const label = youGet
+        ? `${esc(displayName(from))} owes you`
+        : from?.id === you?.id
+          ? `You owe ${esc(displayName(to))}`
+          : `${esc(displayName(from))} owes ${esc(displayName(to))}`;
+      const row = el(`<button class="owe-row pressable">
+        ${avatarHtml(youGet ? from : to, "sm")}
+        <span class="who">${label}</span>
+        <span class="amt money ${youGet ? "pos" : ""}">${fmt(t.amountP)}</span>
+      </button>`);
+      row.addEventListener("click", () => settleSheet(g, t.fromId, t.toId, t.amountP));
+      list.append(row);
+    }
+    oweBox.append(list);
+  }
+
+  const listBox = $(".g-list", view);
+  if (exps.length) {
+    listBox.append(expenseRows(g, exps, you));
+  } else {
+    listBox.append(el(`<div class="empty">
+      <div class="mark">${MARK}</div>
+      <h3>No expenses yet</h3>
+      <p>Add the first one in a few taps. The receipt can come now or whenever you find it.</p>
+    </div>`));
+  }
+
+  setAppbar({
+    title: g.name,
+    left: iconBtn("chevL", "Back to groups", () => (location.hash = "#/")),
+    right: iconBtn("more", "Group menu", () => groupMenuSheet(g)),
+  });
+  return view;
+}
+
+function groupMenuSheet(g) {
+  menuSheet(g.name, [
+    { icon: "people", label: "People", cap: `${g.members.length} in this group`, run: () => membersSheet(g) },
+    {
+      icon: "link",
+      label: g.shared ? "Invite someone" : "Share this group",
+      cap: g.shared
+        ? `${g.members.filter((m) => m.uid).length} of ${g.members.length} have joined`
+        : "Let others add expenses too",
+      run: () => inviteSheet(g),
+    },
+    { icon: "chart", label: "Trip summary", cap: "Spend by category", run: () => tripSummarySheet(g) },
+    { icon: "history", label: "History", cap: "Every add, edit and payment", run: () => historySheet(g) },
+    { icon: "sliders", label: "Group settings", cap: "Name, icon, delete", run: () => groupSettingsSheet(g) },
+  ]);
+}
+
+function expenseRows(g, exps, you) {
+  const box = el(`<div></div>`);
+  let lastDay = "";
+  let list = null;
+  for (const e of exps) {
+    const k = dayKey(e.date);
+    if (k !== lastDay) {
+      lastDay = k;
+      box.append(el(`<div class="day">${dayLabel(e.date)}</div>`));
+      list = el(`<div class="list ex-list"></div>`);
+      box.append(list);
+    }
+    const payers = e.payers.map((p) => displayName(store.memberOf(g, p.memberId))).join(", ");
+    const shares = computeShares(e);
+    const paid = e.payers.filter((p) => p.memberId === you?.id).reduce((a, p) => a + p.amountP, 0);
+    const mine = paid - (shares.get(you?.id) ?? 0);
+    const mineHtml =
+      mine === 0
+        ? shares.has(you?.id)
+          ? `<span>your share is even</span>`
+          : `<span>not your split</span>`
+        : mine > 0
+          ? `<span class="pos money">you lent ${fmt(mine)}</span>`
+          : `<span class="money">you owe ${fmt(-mine)}</span>`;
+    const edited = e.updatedAt - e.createdAt > 1500;
+    const row = el(`<button class="ex-row pressable">
+      <span class="ico">${catOf(e.category).emoji}</span>
+      <span class="m"><b>${esc(e.desc)}</b>
+        <span>${esc(payers)} paid${e.attachments?.length ? `<span class="proof-dot">${I.clip}${e.attachments.length}</span>` : ""}${edited ? `<span class="proof-dot">${I.pen}</span>` : ""}</span></span>
+      <span class="e"><b class="money">${fmt(e.amountP)}</b>${mineHtml}</span>
+    </button>`);
+    row.addEventListener("click", () => expenseDetailSheet(g, e));
+    list.append(row);
+  }
+  return box;
+}
+
+/* ---------- settle up ---------- */
+
+function settleUpSheet(g) {
+  const { bal } = groupCalc(g);
+  const plan = simplify(bal);
+  const you = store.youOf(g);
+  const body = el(`<div>
+    <p class="hint" style="margin-bottom:6px">${plan.length} transfer${plan.length === 1 ? "" : "s"} clear every current balance. Settld suggests the plan and records it; it never moves money.</p>
+    <div class="list settle-list"></div>
+  </div>`);
+  const list = $(".settle-list", body);
+  for (const t of plan) {
+    const from = store.memberOf(g, t.fromId);
+    const to = store.memberOf(g, t.toId);
+    const relation =
+      from?.id === you?.id
+        ? `You pay ${displayName(to)}`
+        : to?.id === you?.id
+          ? `${displayName(from)} pays you`
+          : `${displayName(from)} pays ${displayName(to)}`;
+    const row = el(`<div class="settle-row">
+      <span class="avatar-pair">${avatarHtml(from, "sm")}${avatarHtml(to, "sm")}</span>
+      <span class="grow"><span class="ttl">${esc(relation)}</span><span class="cap">Suggested transfer</span></span>
+      <span class="amt money">${fmt(t.amountP)}</span>
+      <button class="btn ghost small">Record</button>
+    </div>`);
+    row.querySelector("button").addEventListener("click", () => closeSheet(false, () => settleSheet(g, t.fromId, t.toId, t.amountP)));
+    list.append(row);
+  }
+  if (!plan.length) {
+    list.append(el(`<div class="empty compact"><h3>All clear</h3><p>Nothing is pending in this group.</p></div>`));
+  }
+
+  const history = store.state.settlements
+    .filter((s) => s.groupId === g.id)
+    .sort((a, b) => b.createdAt - a.createdAt);
+  if (history.length) {
+    body.append(el(`<div class="section-cap">Payments recorded</div>`));
+    const hl = el(`<div class="list"></div>`);
+    for (const s of history) {
+      const from = store.memberOf(g, s.fromId);
+      const to = store.memberOf(g, s.toId);
+      const badge = s.deleted
+        ? `<span class="badge edited">Reversed</span>`
+        : s.attachments?.length
+          ? `<span class="badge ok">${I.clip}Proof</span>`
+          : "";
+      const row = el(`<button class="row pressable">
+        <span class="tile">${I.check}</span>
+        <span class="grow"><span class="ttl">${esc(displayName(from))} paid ${esc(displayName(to))}</span>
+          <span class="cap">${dayLabel(s.createdAt)}${s.note ? " · " + esc(s.note) : ""} ${badge}</span></span>
+        <span class="end"><span class="amt money">${fmt(s.amountP)}</span></span>
+      </button>`);
+      row.addEventListener("click", () => closeSheet(false, () => settlementDetailSheet(g, s)));
+      hl.append(row);
+    }
+    body.append(hl);
+  }
+
+  openSheet({ title: "Settle up", body });
+}
+
+function settlementDetailSheet(g, settlement) {
+  const from = store.memberOf(g, settlement.fromId);
+  const to = store.memberOf(g, settlement.toId);
+  const body = el(`<div>
+    <div class="expense-hero">
+      <div class="expense-hero-top"><span>${settlement.deleted ? "Reversed payment" : "Recorded payment"}</span><span>${dayLabel(settlement.createdAt)}</span></div>
+      <div class="val money">${fmt(settlement.amountP)}</div>
+      <div class="note">${esc(displayName(from))} paid ${esc(displayName(to))}.</div>
+      ${settlement.note ? `<blockquote>${esc(settlement.note)}</blockquote>` : ""}
+    </div>
+    <div class="settlement-proofs"></div>
+  </div>`);
+  const proofs = $(".settlement-proofs", body);
+  if (settlement.attachments?.length) {
+    proofs.append(el(`<div class="section-cap">Payment proof</div>`));
+    const thumbs = el(`<div class="thumbs proof-gallery"></div>`);
+    for (const [index, id] of settlement.attachments.entries()) {
+      const button = el(`<button class="thumb-button pressable" aria-label="View payment proof ${index + 1}"><img class="thumb" data-att="${id}" alt=""></button>`);
+      button.addEventListener("click", async () => openViewer(await attUrl(id)));
+      thumbs.append(button);
+    }
+    proofs.append(thumbs);
+  } else {
+    proofs.append(el(`<div class="empty compact"><h3>No proof attached</h3><p>The payment was recorded without an image.</p></div>`));
+  }
+  const foot = settlement.deleted ? null : el(`<button class="btn danger">Reverse this payment</button>`);
+  if (foot) {
+    armDanger(foot, async () => {
+      await store.voidSettlement(g, settlement);
+      closeSheet();
+      toast("Payment reversed. The history keeps both records.");
+    });
+  }
+  const wrap = openSheet({ title: "Payment record", body, footer: foot });
+  hydrate(wrap);
+}
+
+function historySheet(g) {
+  const events = store.eventsOf(g.id);
+  const body = el(`<div>
+    <div class="trail-note"><span>${I.check}</span><div><strong>Nothing is silently overwritten</strong><p>Corrections create a new entry so the group can always see what changed.</p></div></div>
+  </div>`);
+  if (events.length) body.append(trailList(events));
+  else body.append(el(`<div class="empty compact"><h3>No activity yet</h3><p>Add an expense and its record begins here.</p></div>`));
+  openSheet({ title: "History", body });
+}
+
+/* ---------- settings ---------- */
+
+function SettingsScreen() {
+  const p = store.state.profile ?? { name: "", upi: "", phone: "", theme: "dark", accent: "coral" };
+  const view = el(`<div>
+    <div class="display"><h1>You</h1><div class="sub">Profile, backup and how Settld looks.</div></div>
+
+    <div class="section-cap">Profile</div>
+    <label class="cap-label" for="st-name" style="margin-top:0">Your name</label>
     <input class="in" id="st-name" value="${esc(p.name)}" autocomplete="name" maxlength="${store.LIMITS.profileName}">
     <label class="cap-label" for="st-upi">Your UPI ID</label>
     <input class="in" id="st-upi" value="${esc(p.upi ?? "")}" placeholder="name@bank" autocapitalize="none" maxlength="${store.LIMITS.upi}">
-    <div class="hint">Used only to create payment links. When signed in, it is included in your private Firebase backup.</div>
-    <button class="btn ghost" id="st-save" style="margin-top:12px">Save profile</button>
+    <div class="hint">Used only to build payment links. Settld never moves money.</div>
+    <label class="cap-label" for="st-phone">Your phone number <span class="dim">(optional)</span></label>
+    <input class="in" id="st-phone" type="tel" value="${esc(p.phone ?? "")}" placeholder="+91 98765 43210" autocomplete="tel" maxlength="${store.LIMITS.phone}">
+    <div class="hint">Lets people you already share a group with find you. Never shown publicly.</div>
+    <button class="btn ghost" id="st-save" style="margin-top:14px">Save profile</button>
 
     <div class="section-cap">Account</div>
     <div class="st-account"></div>
 
-    <div class="section-cap">Appearance</div>
+    <div class="section-cap">Theme</div>
     <div class="seg" id="st-theme">
       <button data-t="dark">Dark</button>
       <button data-t="light">Light</button>
       <button data-t="system">System</button>
     </div>
 
+    <div class="section-cap">Accent</div>
+    <div class="swatches" id="st-accent" role="group" aria-label="Accent colour"></div>
+
     <div class="section-cap">Data</div>
-    <div class="list plain">
+    <div class="list ruled">
       <button class="row pressable" id="st-export">
         <span class="grow"><span class="ttl">Export ledger</span>
-        <span class="cap">Groups, expenses, settlements and the trail as JSON; proof images stay separate</span></span>
+        <span class="cap">Groups, expenses, settlements and history as JSON</span></span>
         <span class="chev">${I.chevR}</span>
       </button>
       <button class="row pressable" id="st-erase">
-        <span class="grow"><span class="ttl neg">Erase all data</span>
+        <span class="grow"><span class="ttl danger-text">Erase all data</span>
         <span class="cap">${cloud.currentUser() ? "Deletes this device copy and your Firebase backup" : "Removes every group and receipt from this device"}</span></span>
       </button>
     </div>
 
-    <div class="empty" style="padding-top:36px">
+    <div class="empty" style="padding-top:40px">
       <div class="mark">${MARK}</div>
-      <h3>Settld 0.3.1</h3>
+      <h3>Settld 0.4</h3>
       <p>Split. Prove. Settle.<br>Core splitting stays free. Your device remains the source of truth.</p>
       <a class="made-by" href="https://thealgothrim.com" target="_blank" rel="noopener">Designed and built by Gaurav Kumar · The Algothrim</a>
     </div>
@@ -628,8 +972,9 @@ function SettingsScreen() {
   $("#st-save", view).addEventListener("click", async () => {
     const name = $("#st-name", view).value.trim();
     const upi = $("#st-upi", view).value.trim();
+    const phone = $("#st-phone", view).value.trim();
     if (!name) return toast("Your name can't be empty");
-    await store.saveProfile({ name, upi });
+    await store.saveProfile({ name, upi, phone });
     for (const g of store.state.groups) {
       const you = store.youOf(g);
       if (you && (you.name !== name || you.upi !== upi)) await store.updateMember(g, you.id, { name, upi });
@@ -639,13 +984,13 @@ function SettingsScreen() {
 
   const acc = $(".st-account", view);
   if (!cloud.cloudAvailable()) {
-    acc.append(el(`<div class="list plain"><div class="row">
+    acc.append(el(`<div class="list ruled"><div class="row">
       <span class="grow"><span class="ttl">Cloud backup</span>
       <span class="cap">Unavailable right now. Everything stays on this device meanwhile.</span></span>
     </div></div>`));
   } else if (cloud.currentUser()) {
     const backup = syncState();
-    const list = el(`<div class="list plain">
+    const list = el(`<div class="list ruled">
       <div class="row"><span class="grow"><span class="ttl">${esc(cloud.accountLabel())}</span>
         <span class="cap">${esc(backup.detail)}</span></span></div>
       <button class="row pressable" id="st-sync"><span class="grow"><span class="ttl">Sync now</span></span><span class="chev">${I.chevR}</span></button>
@@ -671,10 +1016,10 @@ function SettingsScreen() {
     });
     acc.append(list);
   } else {
-    const list = el(`<div class="list plain">
+    const list = el(`<div class="list ruled">
       <button class="row pressable" id="st-signin">
         <span class="grow"><span class="ttl">Sign in</span>
-        <span class="cap">Google sign-in backs up groups, receipts and the trail.</span></span>
+        <span class="cap">Google sign-in backs up groups, receipts and history.</span></span>
         <span class="chev">${I.chevR}</span>
       </button>
     </div>`);
@@ -683,21 +1028,38 @@ function SettingsScreen() {
   }
 
   const seg = $("#st-theme", view);
-  const mark = () => {
+  const markTheme = () => {
     for (const b of seg.querySelectorAll("button")) {
       const active = b.dataset.t === (store.state.profile?.theme ?? "dark");
       b.classList.toggle("on", active);
       b.setAttribute("aria-pressed", String(active));
     }
   };
-  mark();
+  markTheme();
   seg.addEventListener("click", async (e) => {
     const b = e.target.closest("button[data-t]");
     if (!b) return;
     applyTheme(b.dataset.t);
     await store.saveProfile({ theme: b.dataset.t });
-    mark();
+    markTheme();
   });
+
+  const swatchBox = $("#st-accent", view);
+  const currentAccent = store.state.profile?.accent ?? localStorage.getItem("settld-accent") ?? "coral";
+  for (const a of ACCENTS) {
+    const on = a.id === currentAccent;
+    const sw = el(`<button class="swatch ${on ? "on" : ""}" data-a="${a.id}" aria-label="${a.label}" aria-pressed="${on}">${I.check}</button>`);
+    sw.addEventListener("click", async () => {
+      applyAccent(a.id);
+      await store.saveProfile({ accent: a.id });
+      for (const other of swatchBox.children) {
+        const active = other === sw;
+        other.classList.toggle("on", active);
+        other.setAttribute("aria-pressed", String(active));
+      }
+    });
+    swatchBox.append(sw);
+  }
 
   $("#st-export", view).addEventListener("click", async () => {
     const data = await store.exportJson();
@@ -748,315 +1110,7 @@ function SettingsScreen() {
   return view;
 }
 
-/* ---------- group screen ---------- */
-
-function GroupScreen(id) {
-  const g = store.groupById(id);
-  if (!g) {
-    location.hash = "#/";
-    return el("<div></div>");
-  }
-  const you = store.youOf(g);
-  const { exps, setts, bal, spend } = groupCalc(g);
-  const tab = ui.groupTab.get(id) ?? "overview";
-
-  const view = el(`<div class="screen-group">
-    <div class="display group-display">
-      <div class="group-title-line"><span class="group-emoji">${esc(g.emoji ?? "🧾")}</span><div><h1>${esc(g.name)}</h1></div></div>
-      <div class="group-meta">${avatarStackHtml(g.members)}<span>${g.members.length} members</span><span class="meta-dot"></span><span class="money">${fmt(spend)} spent</span></div>
-    </div>
-    <div class="seg group-tabs" role="tablist" aria-label="Group sections">
-      <button role="tab" id="group-tab-overview" aria-controls="group-panel" data-tab="overview">Overview</button>
-      <button role="tab" id="group-tab-expenses" aria-controls="group-panel" data-tab="expenses">Expenses</button>
-      <button role="tab" id="group-tab-balances" aria-controls="group-panel" data-tab="balances">Balances</button>
-      <button role="tab" id="group-tab-trail" aria-controls="group-panel" data-tab="trail">Trail</button>
-    </div>
-    <div class="g-body" id="group-panel" role="tabpanel" aria-labelledby="group-tab-${tab}"></div>
-  </div>`);
-
-  const seg = $(".seg", view);
-  for (const b of seg.querySelectorAll("button")) {
-    b.setAttribute("role", "tab");
-    const active = b.dataset.tab === tab;
-    b.classList.toggle("on", active);
-    b.setAttribute("aria-selected", String(active));
-    b.tabIndex = active ? 0 : -1;
-  }
-  const chooseTab = (b) => {
-    ui.groupTab.set(id, b.dataset.tab);
-    render();
-    requestAnimationFrame(() => $(`.group-tabs [data-tab="${b.dataset.tab}"]`)?.focus());
-  };
-  seg.addEventListener("click", (e) => {
-    const b = e.target.closest("button[data-tab]");
-    if (!b) return;
-    chooseTab(b);
-  });
-  seg.addEventListener("keydown", (e) => {
-    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) return;
-    const buttons = [...seg.querySelectorAll("button[data-tab]")];
-    const current = buttons.indexOf(e.target.closest("button[data-tab]"));
-    if (current < 0) return;
-    e.preventDefault();
-    const next = e.key === "Home" ? 0 : e.key === "End" ? buttons.length - 1 : (current + (e.key === "ArrowRight" ? 1 : -1) + buttons.length) % buttons.length;
-    chooseTab(buttons[next]);
-  });
-
-  const body = $(".g-body", view);
-  if (tab === "overview") body.append(overviewTab(g, exps, bal, setts, you, spend));
-  else if (tab === "expenses") body.append(expensesTab(g, exps, you));
-  else if (tab === "balances") body.append(balancesTab(g, bal, setts, you));
-  else body.append(trailTab(g));
-
-  if (tab === "overview" || tab === "expenses") {
-    const fab = el(`<button class="fab">${I.plus} Add expense</button>`);
-    fab.addEventListener("click", () => expenseSheet(g));
-    view.append(fab);
-  }
-
-  setAppbar({
-    title: g.name,
-    left: iconBtn("chevL", "Back", () => (location.hash = "#/")),
-    right: [
-      iconBtn("chart", "Trip summary", () => tripSummarySheet(g)),
-      iconBtn("sliders", "Group settings", () => groupSettingsSheet(g)),
-    ],
-  });
-  return view;
-}
-
-function overviewTab(g, exps, bal, setts, you, spend) {
-  const box = el(`<div class="overview-tab"></div>`);
-  const net = bal.get(you?.id) ?? 0;
-  const plan = simplify(bal);
-  const withProof = exps.filter((e) => e.attachments?.length).length;
-  const balanceLabel = net > 0 ? "You get" : net < 0 ? "You owe" : "Your balance";
-  const balanceValue = net === 0 ? "All clear" : fmt(Math.abs(net));
-  const balanceClass = net > 0 ? "pos" : net < 0 ? "debt" : "";
-
-  box.append(el(`<section class="ledger-hero">
-    <div class="ledger-label">Total group spend</div>
-    <div class="ledger-amount money">${fmt(spend)}</div>
-    <div class="ledger-stats">
-      <span><b>${exps.length}</b> expenses</span>
-      <span><b>${withProof}</b> with proof</span>
-      <span><b>${setts.length}</b> payment${setts.length === 1 ? "" : "s"} recorded</span>
-    </div>
-  </section>`));
-
-  const actions = el(`<div class="overview-actions">
-    <button class="overview-action balance-action">
-      <span class="action-icon">${I.settle}</span><span><small>${balanceLabel}</small><strong class="money ${balanceClass}">${balanceValue}</strong></span><span class="chev">${I.chevR}</span>
-    </button>
-    <button class="overview-action summary-action">
-      <span class="action-icon">${I.chart}</span><span><small>Trip summary</small><strong>Spend by category</strong></span><span class="chev">${I.chevR}</span>
-    </button>
-  </div>`);
-  $(".balance-action", actions).addEventListener("click", () => {
-    ui.groupTab.set(g.id, "balances");
-    render();
-  });
-  $(".summary-action", actions).addEventListener("click", () => tripSummarySheet(g));
-  box.append(actions);
-
-  if (plan.length) {
-    const settle = el(`<button class="smart-settle-callout">
-      <span class="settle-seal">${I.check}</span>
-      <span><small>Smart settle</small><strong>${plan.length} transfer${plan.length === 1 ? "" : "s"} clear the group</strong><span>See the simplest payment plan</span></span>
-      <span class="chev">${I.chevR}</span>
-    </button>`);
-    settle.addEventListener("click", () => {
-      ui.groupTab.set(g.id, "balances");
-      render();
-    });
-    box.append(settle);
-  }
-
-  box.append(el(`<div class="section-heading recent-heading"><div><h2>Recent expenses</h2></div></div>`));
-  if (exps.length) box.append(expenseRows(g, exps.slice(0, 3), you, false));
-  else box.append(el(`<div class="empty compact"><h3>No expenses yet</h3><p>Add the first one and the hisab begins.</p></div>`));
-  if (exps.length > 3) {
-    const more = el(`<button class="btn quiet more-expenses">View all ${exps.length} expenses</button>`);
-    more.addEventListener("click", () => {
-      ui.groupTab.set(g.id, "expenses");
-      render();
-    });
-    box.append(more);
-  }
-  return box;
-}
-
-function expenseRows(g, exps, you, byDay = true) {
-  const box = el(`<div class="expense-records"></div>`);
-  let lastDay = "";
-  let list = null;
-  if (!byDay) {
-    list = el(`<div class="list expense-list"></div>`);
-    box.append(list);
-  }
-  for (const e of exps) {
-    const k = dayKey(e.date);
-    if (byDay && k !== lastDay) {
-      lastDay = k;
-      box.append(el(`<div class="day">${dayLabel(e.date)}</div>`));
-      list = el(`<div class="list expense-list"></div>`);
-      box.append(list);
-    }
-    const payers = e.payers.map((p) => displayName(store.memberOf(g, p.memberId))).join(", ");
-    const shares = computeShares(e);
-    const paid = e.payers.filter((p) => p.memberId === you?.id).reduce((a, p) => a + p.amountP, 0);
-    const mine = paid - (shares.get(you?.id) ?? 0);
-    const badges = [];
-    if (e.attachments?.length) badges.push(`<span class="badge proof">${I.clip}Proof ${e.attachments.length}</span>`);
-    if (e.updatedAt - e.createdAt > 1500) badges.push(`<span class="badge edited">${I.pen}Edited</span>`);
-    const mineHtml =
-      mine === 0
-        ? shares.has(you?.id)
-          ? `<span class="cap">Your share is even</span>`
-          : `<span class="cap">Not in your split</span>`
-        : mine > 0
-          ? `<span class="cap money pos">You get ${fmt(mine)}</span>`
-          : `<span class="cap money debt">You owe ${fmt(-mine)}</span>`;
-    const row = el(`<button class="row expense-row pressable">
-      <span class="tile expense-tile">${catOf(e.category).emoji}</span>
-      <span class="grow"><span class="ttl">${esc(e.desc)}</span>
-        <span class="cap meta-line"><span>${esc(payers)} paid</span>${badges.join("")}</span></span>
-      <span class="end"><span class="amt money">${fmt(e.amountP)}</span>${mineHtml}</span>
-      <span class="chev">${I.chevR}</span>
-    </button>`);
-    row.addEventListener("click", () => expenseDetailSheet(g, e));
-    list.append(row);
-  }
-  return box;
-}
-
-function expensesTab(g, exps, you) {
-  const box = el(`<div class="expenses-tab"></div>`);
-  if (!exps.length) {
-    box.append(el(`<div class="empty">
-      <div class="mark">${MARK}</div>
-      <h3>No expenses yet</h3>
-      <p>Add the first one in a few taps. Proof can come now or later.</p>
-    </div>`));
-    return box;
-  }
-  const proofCount = exps.reduce((n, e) => n + (e.attachments?.length ? 1 : 0), 0);
-  box.append(el(`<div class="record-summary"><span><b>${exps.length}</b> expenses</span><span><b>${proofCount}</b> with proof</span></div>`));
-  box.append(expenseRows(g, exps, you));
-  return box;
-}
-
-function balancesTab(g, bal, setts, you) {
-  const box = el(`<div class="balances-tab"></div>`);
-  const paymentHistory = store.state.settlements.filter((settlement) => settlement.groupId === g.id).sort((a, b) => b.createdAt - a.createdAt);
-  const net = bal.get(you?.id) ?? 0;
-  const netLabel = net > 0 ? "You get back" : net < 0 ? "You owe" : "Your balance";
-  const netValue = net === 0 ? "All clear" : fmt(Math.abs(net));
-
-  box.append(el(`<div class="position balance-position">
-    <div class="position-icon">${I.settle}</div>
-    <div class="lbl">${netLabel}</div>
-    <div class="val money ${net > 0 ? "pos" : net < 0 ? "debt" : ""}">${netValue}</div>
-    <div class="note">${net > 0 ? "This is what the group currently owes you." : net < 0 ? "Smart settle shows a simple payment plan below." : "Hisab barabar. Nothing is pending."}</div>
-  </div>`));
-
-  box.append(el(`<div class="section-heading"><div><h2>Balances</h2></div></div>`));
-  const list = el(`<div class="list plain"></div>`);
-  for (const m of g.members) {
-    const v = bal.get(m.id) ?? 0;
-    const amount = v > 0 ? `Gets ${fmt(v)}` : v < 0 ? `Owes ${fmt(-v)}` : "Settled";
-    list.append(el(`<div class="row">
-      ${avatarHtml(m)}
-      <span class="grow"><span class="ttl">${esc(displayName(m))}</span></span>
-      <span class="end"><span class="amt money ${v > 0 ? "pos" : v < 0 ? "debt" : "dim"}">${amount}</span></span>
-    </div>`));
-  }
-  box.append(list);
-
-  const plan = simplify(bal);
-  if (plan.length) {
-    box.append(el(`<div class="settle-intro"><span class="settle-seal">${I.check}</span><div><h2>Smart settle</h2><p>${plan.length} transfer${plan.length > 1 ? "s" : ""} clear every current balance. Settld suggests the plan; it never moves money.</p></div></div>`));
-    const pl = el(`<div class="list plain settle-plan"></div>`);
-    for (const t of plan) {
-      const from = store.memberOf(g, t.fromId);
-      const to = store.memberOf(g, t.toId);
-      const row = el(`<div class="row settle-row">
-        <span class="avatar-pair">${avatarHtml(from, "sm")}${avatarHtml(to, "sm")}</span>
-        <span class="grow"><span class="ttl">${esc(displayName(from))} pays ${esc(displayName(to))}</span><span class="cap">Suggested transfer</span></span>
-        <span class="end"><span class="amt money">${fmt(t.amountP)}</span></span>
-      </div>`);
-      const btn = el(`<button class="btn secondary small">Record</button>`);
-      btn.addEventListener("click", () => settleSheet(g, t.fromId, t.toId, t.amountP));
-      row.append(btn);
-      pl.append(row);
-    }
-    box.append(pl);
-  }
-
-  if (paymentHistory.length) {
-    box.append(el(`<div class="section-heading"><div><h2>Payment history</h2></div></div>`));
-    const sl = el(`<div class="list"></div>`);
-    for (const s of paymentHistory) {
-      const from = store.memberOf(g, s.fromId);
-      const to = store.memberOf(g, s.toId);
-      const badge = s.deleted ? `<span class="badge edited">Reversed</span>` : s.attachments?.length ? `<span class="badge ok">${I.clip}Proof attached</span>` : "";
-      const row = el(`<button class="row pressable">
-        <span class="tile">${I.check}</span>
-        <span class="grow"><span class="ttl">${esc(displayName(from))} paid ${esc(displayName(to))}</span>
-          <span class="cap">${dayLabel(s.createdAt)}${s.note ? " · " + esc(s.note) : ""} ${badge}</span></span>
-        <span class="end"><span class="amt money">${fmt(s.amountP)}</span></span>
-      </button>`);
-      row.addEventListener("click", () => settlementDetailSheet(g, s));
-      sl.append(row);
-    }
-    box.append(sl);
-  }
-  return box;
-}
-
-function settlementDetailSheet(g, settlement) {
-  const from = store.memberOf(g, settlement.fromId);
-  const to = store.memberOf(g, settlement.toId);
-  const body = el(`<div class="expense-detail">
-    <div class="expense-hero">
-      <div class="expense-hero-top"><span class="category-label">${I.check} ${settlement.deleted ? "Reversed payment" : "Recorded payment"}</span><span>${dayLabel(settlement.createdAt)}</span></div>
-      <div class="val money">${fmt(settlement.amountP)}</div>
-      <div class="note">${esc(displayName(from))} paid ${esc(displayName(to))}.</div>
-      ${settlement.note ? `<blockquote>${esc(settlement.note)}</blockquote>` : ""}
-    </div>
-    <div class="settlement-proofs"></div>
-  </div>`);
-  const proofs = $(".settlement-proofs", body);
-  if (settlement.attachments?.length) {
-    proofs.append(el(`<div class="section-heading"><div><h2>Payment proof</h2></div></div>`));
-    const thumbs = el(`<div class="thumbs proof-gallery"></div>`);
-    for (const [index, id] of settlement.attachments.entries()) {
-      const button = el(`<button class="thumb-button pressable" aria-label="View payment proof ${index + 1}"><img class="thumb" data-att="${id}" alt=""></button>`);
-      button.addEventListener("click", async () => openViewer(await attUrl(id)));
-      thumbs.append(button);
-    }
-    proofs.append(thumbs);
-  } else {
-    proofs.append(el(`<div class="empty compact"><h3>No proof attached</h3><p>The payment was recorded without an image.</p></div>`));
-  }
-  const foot = settlement.deleted ? null : el(`<button class="btn danger">Reverse this payment</button>`);
-  if (foot) armDanger(foot, async () => {
-      await store.voidSettlement(g, settlement);
-      closeSheet();
-      toast("Payment reversed. The trail keeps both records.");
-    });
-  const wrap = openSheet({ title: "Payment record", body, footer: foot });
-  hydrate(wrap);
-}
-
-function trailTab(g) {
-  const box = el(`<div class="trail-tab"></div>`);
-  const events = store.eventsOf(g.id);
-  box.append(el(`<div class="trail-note"><span>${I.check}</span><div><strong>Nothing is silently overwritten</strong><p>Corrections create a new event so the group can always see what changed.</p></div></div>`));
-  if (events.length) box.append(trailList(events));
-  else box.append(el(`<div class="empty compact"><h3>No activity yet</h3><p>Add an expense and its record will begin here.</p></div>`));
-  return box;
-}
+/* ---------- trip summary ---------- */
 
 function tripSummarySheet(g) {
   const { exps, setts, bal, spend } = groupCalc(g);
@@ -1080,7 +1134,7 @@ function tripSummarySheet(g) {
   });
   const chart = segments.length ? `conic-gradient(${segments.join(",")})` : "var(--line)";
 
-  const body = el(`<div class="trip-summary">
+  const body = el(`<div>
     <div class="summary-chart-row">
       <div class="spend-donut" style="--chart:${chart}" role="img" aria-label="Group spend by category">
         <div><span>Total spent</span><strong class="money">${fmt(spend)}</strong><small>${exps.length} expenses</small></div>
@@ -1092,7 +1146,7 @@ function tripSummarySheet(g) {
       <div><span>${net > 0 ? "You get" : net < 0 ? "You owe" : "Your balance"}</span><strong class="money ${net > 0 ? "pos" : net < 0 ? "debt" : ""}">${net === 0 ? "All clear" : fmt(Math.abs(net))}</strong></div>
       <div><span>Payments recorded</span><strong class="money">${fmt(cleared)}</strong></div>
     </div>
-    <p class="summary-note">Category spend, contribution, and balance are shown separately so the numbers stay truthful.</p>
+    <p class="summary-note">Category spend, what you paid, and your balance are kept separate because they are not parts of one total.</p>
   </div>`);
   const legend = $(".summary-legend", body);
   for (const cat of breakdown) {
@@ -1129,7 +1183,7 @@ async function shareSummary(g) {
   }
 }
 
-/* ---------- welcome + group sheets ---------- */
+/* ---------- welcome + auth ---------- */
 
 let interactiveAuth = false;
 let welcomeAuthWrap = null;
@@ -1186,7 +1240,6 @@ async function welcomeSheet() {
   return welcomeAuthSheet();
 }
 
-// Google sign-in control, shared by the welcome sheet and settings.
 function authOptions(onSignedIn) {
   const box = el(`<div>
     <button class="btn primary au-google">Continue with Google</button>
@@ -1197,6 +1250,8 @@ function authOptions(onSignedIn) {
     interactiveAuth = true;
     try {
       await cloud.signInGoogle();
+      // A redirect sign-in navigates away; nothing after this runs.
+      if (!cloud.currentUser()) return;
       const signedIn = await onSignedIn();
       if (signedIn === false) button.disabled = false;
     } catch (err) {
@@ -1226,8 +1281,9 @@ async function afterSignIn(fromLocked) {
   if (fromLocked) {
     closeLocked();
     welcomeAuthWrap = null;
+  } else {
+    closeSheet();
   }
-  else closeSheet();
   if (!store.state.profile) welcomeNameSheet(cloud.currentUser()?.displayName ?? "");
   else toast(syncFailed ? "Signed in. Backup is paused, but your device copy is ready." : `Welcome back, ${store.state.profile.name.split(/\s+/)[0]}`);
   return true;
@@ -1239,7 +1295,7 @@ function welcomeAuthSheet() {
     <div class="welcome-hero">
       <div class="welcome-lockup"><span class="mark">${MARK}</span><strong>Settld</strong></div>
       <h2>Split. Prove. Settle.</h2>
-      <p>Shared expenses with the receipt, payment proof, and edit history kept together.</p>
+      <p>Shared expenses with the receipt, the payment proof and the edit history kept together.</p>
       <div class="trust-points"><span>${I.clip} Proof stays attached</span><span>${I.pulse} Every edit stays visible</span></div>
     </div>
     <div class="au-slot"></div>
@@ -1266,7 +1322,7 @@ function welcomeNameSheet(prefill) {
     <div class="welcome-hero compact">
       <div class="welcome-lockup"><span class="mark">${MARK}</span><strong>Settld</strong></div>
       <h2>Make it yours</h2>
-      <p>Your name appears on expenses and the trail. Add UPI now or later.</p>
+      <p>Your name appears on expenses and in the history. UPI can wait.</p>
     </div>
     <label class="cap-label" for="w-name">Your name</label>
     <input class="in" id="w-name" placeholder="Gaurav" autocomplete="name" value="${esc(prefill)}" maxlength="${store.LIMITS.profileName}">
@@ -1278,17 +1334,24 @@ function welcomeNameSheet(prefill) {
   foot.addEventListener("click", async () => {
     const name = $("#w-name", body).value.trim();
     if (!name) return toast("Tell us your name first");
-    await store.saveProfile({ name, upi: $("#w-upi", body).value.trim(), theme: localStorage.getItem("settld-theme") ?? "dark" });
+    await store.saveProfile({
+      name,
+      upi: $("#w-upi", body).value.trim(),
+      theme: localStorage.getItem("settld-theme") ?? "dark",
+      accent: localStorage.getItem("settld-accent") ?? "coral",
+    });
     closeLocked();
     render();
   });
 }
 
+/* ---------- group creation and settings ---------- */
+
 function emojiChips(selected) {
-  const box = el(`<div class="chips" role="group" aria-label="Group icon" style="margin-top:8px"></div>`);
+  const box = el(`<div class="chips" role="group" aria-label="Group icon" style="margin-top:4px"></div>`);
   for (const e of GROUP_EMOJIS) {
     const active = e === selected;
-    const c = el(`<button class="chip ${active ? "on" : ""}" data-e="${e}" aria-label="Use ${e} as the group icon" aria-pressed="${active}" style="padding:0 12px">${e}</button>`);
+    const c = el(`<button class="chip ${active ? "on" : ""}" data-e="${e}" aria-label="Use ${e} as the group icon" aria-pressed="${active}">${e}</button>`);
     c.addEventListener("click", () => {
       for (const x of box.children) {
         const on = x === c;
@@ -1304,16 +1367,17 @@ function emojiChips(selected) {
 function newGroupSheet() {
   const names = [];
   const body = el(`<div>
-    <label class="cap-label" for="ng-name">Group name</label>
+    <label class="cap-label" for="ng-name" style="margin-top:4px">Group name</label>
     <input class="in" id="ng-name" placeholder="Goa trip, Flat 302, Office lunch" maxlength="${store.LIMITS.groupName}">
     <label class="cap-label">Icon</label>
     <div class="ng-emoji"></div>
-    <label class="cap-label" for="ng-member">Members <span class="dim">(you're already in)</span></label>
+    <label class="cap-label" for="ng-member">Who else is in <span class="dim">(you're already in)</span></label>
     <div style="display:flex;gap:8px">
       <input class="in" id="ng-member" placeholder="Add a name" maxlength="${store.LIMITS.memberName}" style="flex:1">
-      <button class="btn ghost small" id="ng-add" style="height:54px;border-radius:18px">Add</button>
+      <button class="btn ghost small" id="ng-add" style="min-height:54px">Add</button>
     </div>
     <div class="chips" id="ng-chips" style="margin-top:10px"></div>
+    <div class="hint">You can invite them to join with their own account once the group exists.</div>
   </div>`);
   const emo = emojiChips(GROUP_EMOJIS[0]);
   $(".ng-emoji", body).append(emo);
@@ -1323,7 +1387,7 @@ function newGroupSheet() {
   const addName = () => {
     const n = input.value.trim();
     if (!n) return;
-    if (names.length >= store.LIMITS.members - 1) return toast(`A group can have up to ${store.LIMITS.members} members`);
+    if (names.length >= store.LIMITS.members - 1) return toast(`A group can have up to ${store.LIMITS.members} people`);
     names.push(n);
     const chip = el(`<span class="chip on member-tag">${esc(n)} <button class="chip-remove" aria-label="Remove ${esc(n)}">${I.x}</button></span>`);
     chip.querySelector("button").addEventListener("click", () => {
@@ -1349,31 +1413,27 @@ function newGroupSheet() {
   });
 }
 
-function groupSettingsSheet(g) {
+function membersSheet(g) {
   const body = el(`<div>
-    <label class="cap-label" for="gs-name">Group name</label>
-    <input class="in" id="gs-name" value="${esc(g.name)}" maxlength="${store.LIMITS.groupName}">
-    <label class="cap-label">Icon</label>
-    <div class="gs-emoji"></div>
-    <div class="section-cap" style="margin-left:4px">Members</div>
-    <div class="list plain" id="gs-members"></div>
-    <div style="display:flex;gap:8px;margin-top:12px">
-      <input class="in" id="gs-new" placeholder="Add a member" maxlength="${store.LIMITS.memberName}" style="flex:1">
-      <button class="btn ghost small" id="gs-add" style="height:54px;border-radius:18px">Add</button>
+    <div class="list ruled" id="gs-members" style="margin-top:4px"></div>
+    <div style="display:flex;gap:8px;margin-top:16px">
+      <input class="in" id="gs-new" placeholder="Add a person" maxlength="${store.LIMITS.memberName}" style="flex:1">
+      <button class="btn ghost small" id="gs-add" style="min-height:54px">Add</button>
     </div>
-    <button class="btn danger" id="gs-del" style="margin-top:20px">Delete group</button>
   </div>`);
-  const emo = emojiChips(g.emoji ?? GROUP_EMOJIS[0]);
-  $(".gs-emoji", body).append(emo);
 
   const renderMembers = () => {
     const box = $("#gs-members", body);
     box.replaceChildren();
     for (const m of g.members) {
+      const state = g.shared
+        ? `<span class="member-state ${m.uid ? "joined" : ""}">${m.uid ? `${I.check}Joined` : "Not joined yet"}</span>`
+        : "";
       const row = el(`<button class="row pressable">
         ${avatarHtml(m)}
         <span class="grow"><span class="ttl">${esc(m.name)}${m.isYou ? " (you)" : ""}</span>
           <span class="cap">${m.upi ? esc(m.upi) : "No UPI ID yet"}</span></span>
+        <span class="end">${state}</span>
         <span class="chev">${I.chevR}</span>
       </button>`);
       row.addEventListener("click", () => memberSheet(g, m, renderMembers));
@@ -1385,11 +1445,192 @@ function groupSettingsSheet(g) {
   $("#gs-add", body).addEventListener("click", async () => {
     const n = $("#gs-new", body).value.trim();
     if (!n) return;
-    if (g.members.length >= store.LIMITS.members) return toast(`A group can have up to ${store.LIMITS.members} members`);
+    if (g.members.length >= store.LIMITS.members) return toast(`A group can have up to ${store.LIMITS.members} people`);
     await store.addMember(g, n);
     $("#gs-new", body).value = "";
     renderMembers();
   });
+
+  openSheet({ title: "People", body });
+}
+
+const inviteLink = (gid) => `${location.origin}${location.pathname}#/join/${gid}`;
+
+function inviteSheet(g) {
+  if (!cloud.cloudAvailable()) {
+    const body = el(`<div><p class="hint" style="margin-top:4px">Sharing needs a connection. Try again once you are back online.</p></div>`);
+    openSheet({ title: "Invite someone", body });
+    return;
+  }
+  if (!cloud.currentUser()) {
+    const body = el(`<div>
+      <p class="hint" style="margin-top:4px">Sharing needs an account, so the people you invite have somewhere to join. Your ledger stays on this device either way.</p>
+    </div>`);
+    const foot = el(`<button class="btn primary">Sign in to share</button>`);
+    openSheet({ title: "Invite someone", body, footer: foot });
+    foot.addEventListener("click", () => closeSheet(false, () => authSheet()));
+    return;
+  }
+  if (!g.shared) {
+    const body = el(`<div>
+      <p class="hint" style="margin-top:4px">Turning on sharing moves this group to a space everyone in it can reach. The people you invite sign in, pick their name, and can add expenses themselves. Your other groups are untouched.</p>
+    </div>`);
+    const foot = el(`<button class="btn primary">Turn on sharing</button>`);
+    openSheet({ title: `Share ${g.name}`, body, footer: foot });
+    foot.addEventListener("click", async () => {
+      foot.disabled = true;
+      foot.textContent = "Setting up";
+      try {
+        const info = await cloud.shareGroup(g);
+        await store.markShared(g, info);
+        closeSheet(false, () => inviteSheet(store.groupById(g.id)));
+        toast("Sharing is on");
+      } catch {
+        foot.disabled = false;
+        foot.textContent = "Turn on sharing";
+        toast("Could not turn on sharing, try again");
+      }
+    });
+    return;
+  }
+
+  const link = inviteLink(g.id);
+  const waiting = g.members.filter((m) => !m.uid);
+  const body = el(`<div>
+    <p class="hint" style="margin-top:4px">Send this on WhatsApp. They open it, sign in, pick which name is theirs, and the balance already against that name becomes theirs.</p>
+    <div class="invite-code">${esc(link)}</div>
+    <div class="section-cap">Who has joined</div>
+    <div class="list ruled inv-members"></div>
+    ${waiting.length ? `<div class="hint">${waiting.length} ${waiting.length === 1 ? "person is" : "people are"} still just a name. The maths works either way.</div>` : ""}
+  </div>`);
+  const list = $(".inv-members", body);
+  for (const m of g.members) {
+    list.append(el(`<div class="row">
+      ${avatarHtml(m)}
+      <span class="grow"><span class="ttl">${esc(m.name)}${m.isYou ? " (you)" : ""}</span></span>
+      <span class="end"><span class="member-state ${m.uid ? "joined" : ""}">${m.uid ? `${I.check}Joined` : "Not joined"}</span></span>
+    </div>`));
+  }
+  const foot = el(`<div class="btn-row">
+    <button class="btn ghost inv-copy">Copy link</button>
+    <button class="btn primary inv-share">${I.share} Share</button>
+  </div>`);
+  openSheet({ title: "Invite someone", body, footer: foot });
+  $(".inv-copy", foot).addEventListener("click", async () => {
+    await navigator.clipboard.writeText(link);
+    toast("Invite link copied");
+  });
+  $(".inv-share", foot).addEventListener("click", async () => {
+    try {
+      await navigator.share({ title: `Join ${g.name} on Settld`, text: `Join ${g.name} on Settld`, url: link });
+    } catch {
+      await navigator.clipboard.writeText(link);
+      toast("Invite link copied");
+    }
+  });
+}
+
+/* ---------- joining a shared group ---------- */
+
+function JoinScreen(gid) {
+  const view = el(`<div>
+    <div class="display"><h1>Join group</h1><div class="sub">Checking the invite.</div></div>
+    <div class="join-body"></div>
+  </div>`);
+  const body = $(".join-body", view);
+  setAppbar({ title: "Join group" });
+
+  const existing = store.groupById(gid);
+  if (existing && store.youOf(existing)) {
+    setTimeout(() => (location.hash = `#/group/${gid}`), 0);
+    return view;
+  }
+
+  const fail = (heading, detail, action) => {
+    const empty = el(`<div class="empty"><h3>${esc(heading)}</h3><p>${esc(detail)}</p></div>`);
+    if (action) empty.append(action);
+    body.replaceChildren(empty);
+    $(".sub", view).textContent = "";
+  };
+
+  (async () => {
+    if (!cloud.cloudReady || !cloud.cloudAvailable()) {
+      return fail("Cannot reach Settld", "An invite needs a connection. Open the link again once you are back online.");
+    }
+    if (!cloud.currentUser()) {
+      const btn = el(`<button class="btn primary">Sign in</button>`);
+      btn.addEventListener("click", () => authSheet());
+      return fail("Sign in to join", "Joining a shared group needs an account, so the group knows which balance is yours.", btn);
+    }
+    let remote;
+    try {
+      remote = await cloud.peekGroup(gid);
+    } catch {
+      return fail("Could not open the invite", "Check the link, or ask whoever sent it to send it again.");
+    }
+    if (!remote) return fail("This invite is not valid", "The group may have been deleted, or the link is incomplete.");
+
+    $(".sub", view).textContent = `${remote.members?.length ?? 0} people are already in this group.`;
+    const unclaimed = (remote.members ?? []).filter((m) => !m.uid);
+    const box = el(`<div>
+      <div class="group-title-line" style="margin-top:10px">
+        <span class="group-emoji">${esc(remote.emoji ?? "🧾")}</span>
+        <h1>${esc(remote.name ?? "Group")}</h1>
+      </div>
+      <div class="section-cap">Which one is you?</div>
+      <div class="list ruled join-list"></div>
+    </div>`);
+    const list = $(".join-list", box);
+
+    const join = async (memberId, label) => {
+      for (const b of list.querySelectorAll("button")) b.disabled = true;
+      try {
+        await cloud.joinGroup(gid, {
+          memberId,
+          name: store.state.profile?.name || cloud.currentUser()?.displayName || label,
+          upi: store.state.profile?.upi ?? "",
+        });
+        await store.init();
+        toast(`Joined ${remote.name}`);
+        location.hash = `#/group/${gid}`;
+      } catch {
+        for (const b of list.querySelectorAll("button")) b.disabled = false;
+        toast("Could not join, try again");
+      }
+    };
+
+    for (const m of unclaimed) {
+      const row = el(`<button class="row pressable">
+        ${avatarHtml(m)}
+        <span class="grow"><span class="ttl">${esc(m.name)}</span><span class="cap">Take this name and its balance</span></span>
+        <span class="chev">${I.chevR}</span>
+      </button>`);
+      row.addEventListener("click", () => join(m.id, m.name));
+      list.append(row);
+    }
+    const fresh = el(`<button class="row pressable">
+      <span class="tile">${I.plus}</span>
+      <span class="grow"><span class="ttl">None of these, add me</span><span class="cap">Join with a clean balance</span></span>
+      <span class="chev">${I.chevR}</span>
+    </button>`);
+    fresh.addEventListener("click", () => join(null, store.state.profile?.name ?? "You"));
+    list.append(fresh);
+    body.replaceChildren(box);
+  })();
+
+  return view;
+}
+
+function groupSettingsSheet(g) {
+  const body = el(`<div>
+    <label class="cap-label" for="gs-name" style="margin-top:4px">Group name</label>
+    <input class="in" id="gs-name" value="${esc(g.name)}" maxlength="${store.LIMITS.groupName}">
+    <label class="cap-label">Icon</label>
+    <div class="gs-emoji"></div>
+    <button class="btn danger" id="gs-del" style="margin-top:26px">Delete group</button>
+  </div>`);
+  const emo = emojiChips(g.emoji ?? GROUP_EMOJIS[0]);
+  $(".gs-emoji", body).append(emo);
 
   armDanger($("#gs-del", body), async () => {
     await store.deleteGroup(g);
@@ -1409,12 +1650,12 @@ function groupSettingsSheet(g) {
 
 function memberSheet(g, m, onDone) {
   const body = el(`<div>
-    <label class="cap-label" for="ms-name">Name</label>
+    <label class="cap-label" for="ms-name" style="margin-top:4px">Name</label>
     <input class="in" id="ms-name" value="${esc(m.name)}" maxlength="${store.LIMITS.memberName}">
     <label class="cap-label" for="ms-upi">UPI ID</label>
     <input class="in" id="ms-upi" value="${esc(m.upi ?? "")}" placeholder="name@bank" autocapitalize="none" maxlength="${store.LIMITS.upi}">
     <div class="hint">Used for one-tap UPI when someone clears up with ${esc(displayName(m))}.</div>
-    ${m.isYou ? "" : `<button class="btn danger" id="ms-remove" style="margin-top:18px">Remove from group</button>`}
+    ${m.isYou ? "" : `<button class="btn danger" id="ms-remove" style="margin-top:22px">Remove from group</button>`}
   </div>`);
   const foot = el(`<button class="btn primary">Save</button>`);
   openSheet({ title: m.isYou ? "Your details" : m.name, body, footer: foot });
@@ -1475,10 +1716,10 @@ function expenseSheet(g, existing) {
         notes: "",
       };
 
-  const body = el(`<div class="expense-form">
+  const body = el(`<div>
     <div class="amount-shell"><span aria-hidden="true">₹</span><input class="amount-in money" inputmode="decimal" placeholder="0" value="${esc(s.amountStr)}" aria-label="Amount in rupees"></div>
     <label class="sr-only" for="x-desc">Expense description</label>
-    <input class="in expense-desc" id="x-desc" placeholder="What was it? Dinner, cab, tickets" value="${esc(s.desc)}" maxlength="${store.LIMITS.expenseDesc}">
+    <input class="in expense-desc" id="x-desc" placeholder="What was it?" value="${esc(s.desc)}" maxlength="${store.LIMITS.expenseDesc}">
     <label class="cap-label">Paid by</label>
     <div class="x-payers"></div>
     <label class="cap-label">Split between</label>
@@ -1493,7 +1734,7 @@ function expenseSheet(g, existing) {
           <button data-m="percent">Percent</button>
           <button data-m="shares">Shares</button>
         </div>
-        <div class="x-values"></div>
+        <div class="x-values" style="margin-top:14px"></div>
         <label class="cap-label">Category</label>
         <div class="chips x-cats"></div>
         <label class="cap-label" for="x-date">Date</label>
@@ -1512,17 +1753,16 @@ function expenseSheet(g, existing) {
   amountIn.addEventListener("input", () => {
     s.amountStr = amountIn.value;
     renderValues();
-    renderPayers();
+    updatePayerHint();
   });
   $("#x-desc", body).addEventListener("input", (e) => (s.desc = e.target.value));
   $("#x-date", body).addEventListener("change", (e) => (s.date = fromDateInput(e.target.value)));
   $("#x-notes", body).addEventListener("input", (e) => (s.notes = e.target.value));
 
-  // categories
   const catBox = $(".x-cats", body);
   for (const c of CATS) {
     const active = c.id === s.category;
-    const chip = el(`<button class="chip ${active ? "on" : ""}" data-c="${c.id}" aria-pressed="${active}" style="padding-left:12px">${c.emoji} ${c.label}</button>`);
+    const chip = el(`<button class="chip ${active ? "on" : ""}" data-c="${c.id}" aria-pressed="${active}">${c.emoji} ${c.label}</button>`);
     chip.addEventListener("click", () => {
       s.category = c.id;
       for (const x of catBox.children) {
@@ -1534,7 +1774,6 @@ function expenseSheet(g, existing) {
     catBox.append(chip);
   }
 
-  // payers
   const payersBox = $(".x-payers", body);
   function renderPayers() {
     payersBox.replaceChildren();
@@ -1550,7 +1789,7 @@ function expenseSheet(g, existing) {
         chips.append(chip);
       }
       payersBox.append(chips);
-      const link = el(`<button class="hint payer-multi-toggle">+ Multiple people paid</button>`);
+      const link = el(`<button class="payer-multi-toggle">+ More than one person paid</button>`);
       link.addEventListener("click", () => {
         s.multi = true;
         renderPayers();
@@ -1559,10 +1798,9 @@ function expenseSheet(g, existing) {
     } else {
       for (const m of g.members) {
         const cur = s.payers.find((p) => p.memberId === m.id);
-        const row = el(`<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+        const row = el(`<div class="split-row">
           <button class="chip ${cur ? "on" : ""}" aria-pressed="${Boolean(cur)}" aria-label="Toggle ${esc(displayName(m))} as a payer" style="flex:1;justify-content:flex-start">${avatarHtml(m, "sm")} ${esc(displayName(m))}</button>
-          <input class="in money" type="number" min="0" step="0.01" inputmode="decimal" placeholder="₹0" value="${esc(cur?.amountStr ?? "")}" aria-label="Amount paid by ${esc(displayName(m))} in rupees"
-            style="width:110px;height:48px;border-radius:14px;text-align:right" ${cur ? "" : "disabled"}>
+          <input class="in money" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0" value="${esc(cur?.amountStr ?? "")}" aria-label="Amount paid by ${esc(displayName(m))} in rupees" ${cur ? "" : "disabled"}>
         </div>`);
         row.querySelector(".chip").addEventListener("click", () => {
           if (cur) s.payers = s.payers.filter((p) => p.memberId !== m.id);
@@ -1576,8 +1814,7 @@ function expenseSheet(g, existing) {
         });
         payersBox.append(row);
       }
-      const hint = el(`<div class="hint x-payhint" role="status" aria-live="polite"></div>`);
-      payersBox.append(hint);
+      payersBox.append(el(`<div class="hint x-payhint" role="status" aria-live="polite"></div>`));
       updatePayerHint();
     }
   }
@@ -1599,7 +1836,6 @@ function expenseSheet(g, existing) {
   }
   renderPayers();
 
-  // participants
   const partsBox = $(".x-parts", body);
   function renderParts() {
     partsBox.replaceChildren();
@@ -1617,7 +1853,6 @@ function expenseSheet(g, existing) {
   }
   renderParts();
 
-  // split mode + per-person values
   const modeSeg = $(".x-mode", body);
   const valuesBox = $(".x-values", body);
   const markMode = () => {
@@ -1660,15 +1895,14 @@ function expenseSheet(g, existing) {
       valuesBox.append(el(`<div class="hint">${total > 0 ? `About ${fmt(Math.round(total / ids.length))} each, ${ids.length} people` : `${ids.length} people, equal shares`}</div>`));
       return;
     }
-    const unit = s.mode === "exact" ? "₹" : s.mode === "percent" ? "%" : "share";
+    const unit = s.mode === "exact" ? "₹" : s.mode === "percent" ? "%" : "shares";
     for (const idm of ids) {
       const m = store.memberOf(g, idm);
-      const row = el(`<div style="display:flex;gap:10px;align-items:center;margin-bottom:8px">
+      const row = el(`<div class="split-row">
         ${avatarHtml(m, "sm")}
-        <span style="flex:1;font-weight:600;font-size:14px">${esc(displayName(m))}</span>
-        <input class="in money" type="number" min="0" step="${s.mode === "shares" ? "1" : "0.01"}" inputmode="decimal" placeholder="0" value="${esc(s.values.get(idm) ?? "")}" aria-label="${s.mode === "exact" ? "Amount" : s.mode === "percent" ? "Percentage" : "Shares"} for ${esc(displayName(m))}"
-          style="width:110px;height:48px;border-radius:14px;text-align:right">
-        <span class="dim" style="width:38px;font-size:13px">${unit}</span>
+        <span class="nm">${esc(displayName(m))}</span>
+        <input class="in money" type="number" min="0" step="${s.mode === "shares" ? "1" : "0.01"}" inputmode="decimal" placeholder="0" value="${esc(s.values.get(idm) ?? "")}" aria-label="${s.mode === "exact" ? "Amount" : s.mode === "percent" ? "Percentage" : "Shares"} for ${esc(displayName(m))}">
+        <span class="unit">${unit}</span>
       </div>`);
       row.querySelector("input").addEventListener("input", (e) => {
         s.values.set(idm, e.target.value);
@@ -1709,7 +1943,6 @@ function expenseSheet(g, existing) {
   }
   renderValues();
 
-  // proof
   const thumbs = $(".x-thumbs", body);
   const fileIn = $(".x-file", body);
   function renderThumbs() {
@@ -1832,16 +2065,16 @@ function expenseDetailSheet(g, e) {
     .join(", ");
   const modeLabel = { equal: "equally", exact: "by exact amounts", percent: "by percent", shares: "by shares" }[e.split.mode];
 
-  const body = el(`<div class="expense-detail">
+  const body = el(`<div>
     <div class="expense-hero">
-      <div class="expense-hero-top"><span class="category-label">${catOf(e.category).emoji} ${esc(catOf(e.category).label)}</span><span>${dayLabel(e.date)}</span></div>
+      <div class="expense-hero-top"><span>${catOf(e.category).emoji} ${esc(catOf(e.category).label)}</span><span>${dayLabel(e.date)}</span></div>
       <div class="val money">${fmt(e.amountP)}</div>
       <div class="note">Paid by ${esc(paidBy)}. Split ${modeLabel} between ${e.split.participants.length}.</div>
       ${e.notes ? `<blockquote>${esc(e.notes)}</blockquote>` : ""}
-      <div class="proof-status ${e.attachments?.length ? "has-proof" : "no-proof"}">${e.attachments?.length ? `${I.clip}<span><strong>Proof attached</strong><small>${e.attachments.length} image${e.attachments.length === 1 ? "" : "s"} kept with this expense</small></span>` : `${I.receipt}<span><strong>No proof attached</strong><small>Add the receipt now or whenever you find it</small></span><button class="btn quiet small detail-add-proof">Add proof</button>`}</div>
+      <div class="proof-status ${e.attachments?.length ? "has-proof" : "no-proof"}">${e.attachments?.length ? `${I.clip}<span><strong>Proof attached</strong><small>${e.attachments.length} image${e.attachments.length === 1 ? "" : "s"} kept with this expense</small></span>` : `${I.receipt}<span><strong>No proof attached</strong><small>Add the receipt now or whenever you find it</small></span><button class="btn quiet small detail-add-proof">Add</button>`}</div>
     </div>
-    <div class="section-heading"><div><h2>Who owes what</h2></div></div>
-    <div class="list plain x-shares"></div>
+    <div class="section-cap">Who owes what</div>
+    <div class="list x-shares"></div>
     <div class="x-proofwrap"></div>
     <div class="x-trailwrap"></div>
   </div>`);
@@ -1850,7 +2083,7 @@ function expenseDetailSheet(g, e) {
   for (const p of e.split.participants) {
     const m = store.memberOf(g, p.memberId);
     const paid = e.payers.filter((x) => x.memberId === p.memberId).reduce((a, x) => a + x.amountP, 0);
-    sl.append(el(`<div class="row" style="min-height:52px">
+    sl.append(el(`<div class="row" style="min-height:54px">
       ${avatarHtml(m, "sm")}
       <span class="grow"><span class="ttl" style="font-size:14.5px">${esc(displayName(m))}</span>
         ${paid ? `<span class="cap">paid ${fmt(paid)}</span>` : ""}</span>
@@ -1860,7 +2093,7 @@ function expenseDetailSheet(g, e) {
 
   if (e.attachments?.length) {
     const wrap = $(".x-proofwrap", body);
-    wrap.append(el(`<div class="section-heading"><div><h2>Proof</h2></div></div>`));
+    wrap.append(el(`<div class="section-cap">Proof</div>`));
     const t = el(`<div class="thumbs proof-gallery"></div>`);
     for (const [index, id] of e.attachments.entries()) {
       const button = el(`<button class="thumb-button pressable" aria-label="View proof ${index + 1}"><img class="thumb" data-att="${id}" alt=""></button>`);
@@ -1873,7 +2106,7 @@ function expenseDetailSheet(g, e) {
   const evs = store.eventsOf(g.id).filter((ev) => ev.data?.expenseId === e.id);
   if (evs.length) {
     const wrap = $(".x-trailwrap", body);
-    wrap.append(el(`<div class="section-cap" style="margin-left:4px">Trail</div>`));
+    wrap.append(el(`<div class="section-cap">History</div>`));
     wrap.append(trailList(evs));
   }
 
@@ -1893,7 +2126,7 @@ function expenseDetailSheet(g, e) {
   armDanger(foot.querySelector(".danger"), async () => {
     await store.deleteExpense(g, e);
     closeSheet();
-    toast("Deleted. It stays on the trail.");
+    toast("Deleted. It stays in the history.");
   });
 }
 
@@ -1905,17 +2138,17 @@ function settleSheet(g, fromId, toId, amountP) {
   const att = [];
 
   const body = el(`<div>
-    <div style="display:flex;align-items:center;justify-content:center;gap:14px;padding:14px 0 4px">
-      <span style="display:flex;flex-direction:column;align-items:center;gap:6px">${avatarHtml(from)}<b style="font-size:13px">${esc(displayName(from))}</b></span>
-      <span class="dim" style="width:26px">${I.arrowR}</span>
-      <span style="display:flex;flex-direction:column;align-items:center;gap:6px">${avatarHtml(to)}<b style="font-size:13px">${esc(displayName(to))}</b></span>
+    <div style="display:flex;align-items:center;justify-content:center;gap:16px;padding:12px 0 2px">
+      <span style="display:flex;flex-direction:column;align-items:center;gap:7px">${avatarHtml(from)}<b style="font-size:13px">${esc(displayName(from))}</b></span>
+      <span class="dim" style="width:24px">${I.arrowR}</span>
+      <span style="display:flex;flex-direction:column;align-items:center;gap:7px">${avatarHtml(to)}<b style="font-size:13px">${esc(displayName(to))}</b></span>
     </div>
-    <input class="amount-in money" inputmode="decimal" value="${esc(fromPaise(amountP))}" aria-label="Amount">
+    <div class="amount-shell"><span aria-hidden="true">₹</span><input class="amount-in money" inputmode="decimal" value="${esc(fromPaise(amountP))}" aria-label="Amount"></div>
     ${from?.isYou && to.upi
       ? `<a class="btn ghost" id="se-upi">${I.upi} Pay ${esc(displayName(to))} via UPI</a>
          <div class="hint" style="text-align:center">Opens your UPI app with the amount filled in. Settld does not process the payment.</div>`
       : from?.isYou
-        ? `<div class="hint" style="text-align:center">${esc(displayName(to))} has no UPI ID saved. Add one in group settings, or record the payment after paying another way.</div>`
+        ? `<div class="hint" style="text-align:center">${esc(displayName(to))} has no UPI ID saved. Add one under People, or record the payment after paying another way.</div>`
         : `<div class="hint" style="text-align:center">Record this only after ${esc(displayName(from))} confirms the payment.</div>`}
     <label class="cap-label">Payment proof <span class="dim">(screenshot, optional)</span></label>
     <div class="thumbs se-thumbs"></div>
@@ -1990,6 +2223,7 @@ function settleSheet(g, fromId, toId, amountP) {
 /* ---------- boot ---------- */
 
 applyTheme(localStorage.getItem("settld-theme") ?? "dark");
+applyAccent(localStorage.getItem("settld-accent") ?? "coral");
 initDock();
 store.subscribe(render);
 cloud.setOnSynced(() => store.init());
@@ -2002,6 +2236,7 @@ cloud.onAuth((signedIn) => {
 });
 store.init().then(async () => {
   applyTheme(store.state.profile?.theme ?? localStorage.getItem("settld-theme") ?? "dark");
+  applyAccent(store.state.profile?.accent ?? localStorage.getItem("settld-accent") ?? "coral");
   render();
   if (cloud.cloudReady) {
     try {
@@ -2013,6 +2248,15 @@ store.init().then(async () => {
     }
   }
   if (!store.state.profile) welcomeSheet();
+});
+
+// Shared groups are pulled when the app comes back to the foreground rather
+// than held open on a live listener, which keeps read volume inside the free
+// Firestore tier no matter how many groups a person is in.
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState !== "visible") return;
+  if (!cloud.currentUser() || !navigator.onLine) return;
+  cloud.syncSharedGroups().catch(() => {});
 });
 
 if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {

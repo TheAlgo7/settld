@@ -8,7 +8,7 @@
 
 import { db, setMirror } from "./db.js";
 import { firebaseConfig } from "./firebase-config.js";
-import { LIMITS, normalizeProfile } from "./store.js";
+import { LIMITS, normalizeProfile, state as storeState } from "./store.js";
 
 export const cloudReady = Boolean(firebaseConfig?.apiKey);
 let available = false;
@@ -82,6 +82,10 @@ export async function initCloud() {
   auth = au.getAuth(app);
   fs = f.getFirestore(app);
   available = true;
+  // Completes a redirect sign-in started on a previous page load. It has to
+  // run before the auth listener settles, otherwise a returning redirect looks
+  // like a signed-out boot and the welcome sheet flashes.
+  await au.getRedirectResult(auth).catch(() => null);
   addEventListener("online", () => syncNow().catch(() => {}));
   au.onAuthStateChanged(auth, (u) => {
     user = u;
@@ -99,9 +103,33 @@ export async function initCloud() {
 
 /* ---- sign in / out ---- */
 
+// Installed PWAs and several mobile browsers either block the auth popup or
+// open it without an opener, so the promise never settles. Those cases fall
+// back to a full-page redirect, which boot completes via getRedirectResult.
+const POPUP_UNAVAILABLE = new Set([
+  "auth/popup-blocked",
+  "auth/operation-not-supported-in-this-environment",
+  "auth/web-storage-unsupported",
+  "auth/internal-error",
+]);
+
+const standalone = () =>
+  matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+
 export async function signInGoogle() {
   const p = new mods.GoogleAuthProvider();
-  await mods.signInWithPopup(auth, p);
+  p.setCustomParameters({ prompt: "select_account" });
+  if (standalone()) {
+    await mods.signInWithRedirect(auth, p);
+    return;
+  }
+  try {
+    await mods.signInWithPopup(auth, p);
+  } catch (error) {
+    if (!POPUP_UNAVAILABLE.has(error?.code)) throw error;
+    await mods.signInWithRedirect(auth, p);
+    return;
+  }
   user = auth.currentUser;
 }
 
@@ -168,7 +196,348 @@ async function applyRemoteReset(ownerUid, resetAt, force = false) {
   return task;
 }
 
+/* ---- shared groups ----
+ *
+ * A shared group lives at groups/{gid} and is readable and writable by every
+ * member, instead of at users/{uid}/... where only its creator could see it.
+ * Sharing is opt-in per group: until someone taps Invite, nothing changes and
+ * the group keeps using the personal backup path below.
+ */
+
+const groupRef = (gid) => mods.doc(fs, `groups/${gid}`);
+const sharedRef = (gid, sub, id) => mods.doc(fs, `groups/${gid}/${sub}/${id}`);
+const sharedCol = (gid, sub) => mods.collection(fs, `groups/${gid}/${sub}`);
+
+const localGroup = (gid) => storeState.groups.find((g) => g.id === gid);
+const isSharedGroup = (gid) => Boolean(localGroup(gid)?.shared);
+
+// Attachments carry no group reference, so the owning record is what places
+// them on the shared side or the personal side.
+function attachmentGroupId(attachmentId) {
+  const holder =
+    storeState.expenses.find((e) => e.attachments?.includes(attachmentId)) ??
+    storeState.settlements.find((s) => s.attachments?.includes(attachmentId));
+  return holder?.groupId ?? null;
+}
+
+function sharedGroupIdFor(storeName, payload) {
+  if (storeName === "groups") {
+    const gid = typeof payload === "string" ? payload : payload?.id;
+    return isSharedGroup(gid) ? gid : null;
+  }
+  if (storeName === "attachments") {
+    const id = typeof payload === "string" ? payload : payload?.id;
+    const gid = attachmentGroupId(id);
+    return gid && isSharedGroup(gid) ? gid : null;
+  }
+  if (typeof payload === "string") {
+    // A hard delete only gives us the key, so find the record's group locally.
+    const bucket = { expenses: storeState.expenses, settlements: storeState.settlements, events: storeState.events }[storeName];
+    const gid = bucket?.find((r) => r.id === payload)?.groupId;
+    return gid && isSharedGroup(gid) ? gid : null;
+  }
+  const gid = payload?.groupId;
+  return gid && isSharedGroup(gid) ? gid : null;
+}
+
+// The shared document must not carry this device's idea of who "you" are.
+const shareableMembers = (members) =>
+  (members ?? []).map(({ isYou, ...rest }) => (rest.uid ? rest : { ...rest, uid: rest.uid ?? null }));
+
+function groupToDoc(group) {
+  return {
+    id: group.id,
+    name: group.name,
+    emoji: group.emoji ?? "🧾",
+    currency: group.currency ?? "INR",
+    members: shareableMembers(group.members),
+    memberUids: [...new Set(group.memberUids ?? [])],
+    ownerUid: group.ownerUid,
+    createdAt: group.createdAt ?? Date.now(),
+    updatedAt: group.updatedAt ?? Date.now(),
+  };
+}
+
+function docToGroup(remote, uid, previous) {
+  const members = (remote.members ?? []).map((m) => {
+    const member = { ...m };
+    if (member.uid == null) delete member.uid;
+    if (member.uid && member.uid === uid) member.isYou = true;
+    else delete member.isYou;
+    return member;
+  });
+  // Before anybody has claimed a row, keep this device's own marker so the
+  // owner does not lose track of themselves mid-migration.
+  if (!members.some((m) => m.isYou) && previous) {
+    const mine = previous.members?.find((m) => m.isYou);
+    const match = mine && members.find((m) => m.id === mine.id);
+    if (match) match.isYou = true;
+  }
+  return { ...remote, members, shared: true };
+}
+
+async function applySharedMirror(op, storeName, payload, gid) {
+  if (storeName === "groups") {
+    if (op === "del") return leaveOrDeleteShared(gid);
+    return mods.setDoc(groupRef(gid), groupToDoc(payload));
+  }
+  const id = typeof payload === "string" ? payload : payload.id;
+  if (op === "del") {
+    // History is append-only on the shared side; a local prune must not try to
+    // remove somebody else's record of what happened.
+    if (storeName === "events") return;
+    return mods.deleteDoc(sharedRef(gid, storeName, id));
+  }
+  if (storeName === "attachments") {
+    return mods.setDoc(sharedRef(gid, "attachments", id), await attToDoc(payload));
+  }
+  if (storeName === "events") {
+    const existing = await mods.getDoc(sharedRef(gid, "events", id));
+    if (existing.exists()) return;
+    return mods.setDoc(sharedRef(gid, "events", id), payload);
+  }
+  return mods.setDoc(sharedRef(gid, storeName, id), payload);
+}
+
+async function leaveOrDeleteShared(gid) {
+  const snap = await mods.getDoc(groupRef(gid));
+  if (!snap.exists()) return;
+  if (snap.data().ownerUid === user?.uid) {
+    for (const sub of ["expenses", "settlements", "events", "attachments"]) {
+      await deleteSharedCollection(gid, sub);
+    }
+    await mods.deleteDoc(groupRef(gid));
+    return;
+  }
+  const remote = snap.data();
+  await mods.updateDoc(groupRef(gid), {
+    memberUids: (remote.memberUids ?? []).filter((u) => u !== user?.uid),
+    members: (remote.members ?? []).map((m) => (m.uid === user?.uid ? { ...m, uid: null } : m)),
+    updatedAt: Date.now(),
+  });
+}
+
+async function deleteSharedCollection(gid, sub) {
+  while (true) {
+    const snap = await mods.getDocs(mods.query(sharedCol(gid, sub), mods.limit(400)));
+    if (snap.empty) return;
+    const batch = mods.writeBatch(fs);
+    for (const d of snap.docs) batch.delete(d.ref);
+    await batch.commit();
+  }
+}
+
+// Removes a group's documents from the personal backup once it goes shared, so
+// the two paths never both claim it. No tombstones: those would tell every
+// other device to delete the group outright.
+async function detachFromPersonal(group) {
+  const uid = user?.uid;
+  if (!uid) return;
+  const ids = { expenses: [], settlements: [], events: [], attachments: [] };
+  for (const e of storeState.expenses.filter((x) => x.groupId === group.id)) {
+    ids.expenses.push(e.id);
+    ids.attachments.push(...(e.attachments ?? []));
+  }
+  for (const s of storeState.settlements.filter((x) => x.groupId === group.id)) {
+    ids.settlements.push(s.id);
+    ids.attachments.push(...(s.attachments ?? []));
+  }
+  for (const ev of storeState.events.filter((x) => x.groupId === group.id)) ids.events.push(ev.id);
+  for (const [sub, list] of Object.entries(ids)) {
+    for (const id of list) await mods.deleteDoc(userRef(uid, `${sub}/${id}`)).catch(() => {});
+  }
+  await mods.deleteDoc(userRef(uid, `groups/${group.id}`)).catch(() => {});
+}
+
+export async function shareGroup(group) {
+  if (!user) throw new Error("cloud/no-user");
+  await claimLocalData();
+  const you = group.members.find((m) => m.isYou);
+  const prepared = {
+    ...group,
+    ownerUid: group.ownerUid ?? user.uid,
+    memberUids: [...new Set([...(group.memberUids ?? []), user.uid])],
+    members: group.members.map((m) => (m.id === you?.id ? { ...m, uid: user.uid } : m)),
+    updatedAt: Date.now(),
+  };
+  const existing = await mods.getDoc(groupRef(group.id));
+  if (!existing.exists()) {
+    // create must present exactly the caller as the only member
+    await mods.setDoc(groupRef(group.id), {
+      ...groupToDoc(prepared),
+      memberUids: [user.uid],
+      ownerUid: user.uid,
+    });
+  }
+  await mods.setDoc(groupRef(group.id), groupToDoc(prepared));
+
+  for (const e of storeState.expenses.filter((x) => x.groupId === group.id)) {
+    await mods.setDoc(sharedRef(group.id, "expenses", e.id), e);
+  }
+  for (const s of storeState.settlements.filter((x) => x.groupId === group.id)) {
+    await mods.setDoc(sharedRef(group.id, "settlements", s.id), s);
+  }
+  for (const ev of storeState.events.filter((x) => x.groupId === group.id)) {
+    await mods.setDoc(sharedRef(group.id, "events", ev.id), ev).catch(() => {});
+  }
+  await pushSharedAttachments(group.id);
+  await detachFromPersonal(group);
+  return { ownerUid: prepared.ownerUid, memberUids: prepared.memberUids, youMemberId: you?.id };
+}
+
+async function pushSharedAttachments(gid) {
+  const wanted = new Set();
+  for (const e of storeState.expenses.filter((x) => x.groupId === gid)) for (const id of e.attachments ?? []) wanted.add(id);
+  for (const s of storeState.settlements.filter((x) => x.groupId === gid)) for (const id of s.attachments ?? []) wanted.add(id);
+  for (const id of wanted) {
+    const rec = await db.get("attachments", id);
+    if (!rec) continue;
+    const already = await mods.getDoc(sharedRef(gid, "attachments", id));
+    if (already.exists() && already.data()?.b64) continue;
+    try {
+      await mods.setDoc(sharedRef(gid, "attachments", id), await attToDoc(rec));
+    } catch {
+      /* an oversized legacy proof stays local rather than failing the share */
+    }
+  }
+}
+
+// Reads a group by id so an invitee can see what they are joining.
+export async function peekGroup(gid) {
+  if (!user) throw new Error("cloud/no-user");
+  const snap = await mods.getDoc(groupRef(gid));
+  return snap.exists() ? snap.data() : null;
+}
+
+export async function joinGroup(gid, { memberId, name, upi }) {
+  if (!user) throw new Error("cloud/no-user");
+  await claimLocalData();
+  const uid = user.uid;
+  await mods.runTransaction(fs, async (transaction) => {
+    const snap = await transaction.get(groupRef(gid));
+    if (!snap.exists()) throw new Error("cloud/group-missing");
+    const remote = snap.data();
+    if ((remote.memberUids ?? []).includes(uid)) return;
+    const members = [...(remote.members ?? [])];
+    const index = memberId ? members.findIndex((m) => m.id === memberId) : -1;
+    if (index >= 0) {
+      members[index] = { ...members[index], uid, name: members[index].name || name || "You", upi: members[index].upi || upi || "" };
+    } else {
+      members.push({ id: crypto.randomUUID(), name: name || "You", upi: upi ?? "", uid });
+    }
+    transaction.update(groupRef(gid), {
+      memberUids: [...remote.memberUids, uid],
+      members,
+      updatedAt: Date.now(),
+    });
+  });
+  return pullSharedGroup(gid);
+}
+
+// Two-way merge for one shared group. Newer updatedAt wins, same as the
+// personal mirror, so the arithmetic stays deterministic across devices.
+async function pullSharedGroup(gid) {
+  const uid = user.uid;
+  const snap = await mods.getDoc(groupRef(gid));
+  const localBefore = await db.get("groups", gid);
+  if (!snap.exists()) {
+    if (localBefore?.shared) {
+      for (const s of ["expenses", "settlements", "events"]) {
+        for (const r of await db.all(s)) if (r.groupId === gid) await db.del(s, r.id, true);
+      }
+      await db.del("groups", gid, true);
+    }
+    return false;
+  }
+  const remote = snap.data();
+  if (!(remote.memberUids ?? []).includes(uid)) {
+    // Removed from the group: drop the local copy rather than keep a ledger
+    // that can no longer be reconciled.
+    if (localBefore) await db.del("groups", gid, true);
+    return false;
+  }
+
+  if (localBefore?.shared && tsOf(localBefore) > tsOf(remote)) {
+    await mods.setDoc(groupRef(gid), groupToDoc({ ...localBefore, ownerUid: remote.ownerUid, memberUids: remote.memberUids }));
+  } else {
+    await db.put("groups", docToGroup(remote, uid, localBefore), true);
+  }
+
+  for (const sub of ["expenses", "settlements"]) {
+    const remoteDocs = await mods.getDocs(sharedCol(gid, sub));
+    const seen = new Set();
+    for (const d of remoteDocs.docs) {
+      const r = d.data();
+      seen.add(r.id);
+      const local = await db.get(sub, r.id);
+      const direction = mergeDirection(local, r);
+      if (direction === "remote") await db.put(sub, r, true);
+      else if (direction === "local" && local) await mods.setDoc(sharedRef(gid, sub, r.id), local);
+    }
+    for (const local of await db.all(sub)) {
+      if (local.groupId === gid && !seen.has(local.id)) await mods.setDoc(sharedRef(gid, sub, local.id), local);
+    }
+  }
+
+  const remoteEvents = await mods.getDocs(sharedCol(gid, "events"));
+  const eventIds = new Set();
+  for (const d of remoteEvents.docs) {
+    const r = d.data();
+    eventIds.add(r.id);
+    if (!(await db.get("events", r.id))) await db.put("events", r, true);
+  }
+  for (const local of await db.all("events")) {
+    if (local.groupId === gid && !eventIds.has(local.id)) {
+      await mods.setDoc(sharedRef(gid, "events", local.id), local).catch(() => {});
+    }
+  }
+
+  const remoteAtt = await mods.getDocs(sharedCol(gid, "attachments"));
+  for (const d of remoteAtt.docs) {
+    const r = d.data();
+    if (!r.b64) continue;
+    if (!(await db.get("attachments", r.id))) {
+      await db.put("attachments", { id: r.id, blob: b64ToBlob(r.b64, r.mime), mime: r.mime, name: r.name, ts: r.ts }, true);
+    }
+  }
+  await pushSharedAttachments(gid);
+  return true;
+}
+
+export async function syncSharedGroups() {
+  if (!user || !available) return;
+  const ids = storeState.groups.filter((g) => g.shared).map((g) => g.id);
+  for (const gid of ids) {
+    try {
+      await pullSharedGroup(gid);
+    } catch {
+      failedUid = user.uid;
+    }
+  }
+  if (ids.length) await syncedCb?.();
+}
+
 function mirrorWrite(op, storeName, payload) {
+  const sharedGid = user && available ? sharedGroupIdFor(storeName, payload) : null;
+  if (sharedGid) {
+    inFlightWrites += 1;
+    notifyStatus();
+    const task = applySharedMirror(op, storeName, payload, sharedGid)
+      .then(() => {
+        if (failedUid === user.uid) failedUid = null;
+      })
+      .catch(() => {
+        failedUid = user.uid;
+      })
+      .finally(() => {
+        inFlightWrites = Math.max(0, inFlightWrites - 1);
+        notifyStatus();
+      });
+    mirrorWrites.add(task);
+    task.finally(() => mirrorWrites.delete(task));
+    return op === "del" ? task : undefined;
+  }
+
   const durableDelete = op === "del" && MIRRORED.has(storeName)
     ? queueOutbox(op, storeName, payload)
     : Promise.resolve();
@@ -449,12 +818,22 @@ async function runSync(expectedUid, resetAttempt = 0) {
       await mods.deleteDoc(ref(`${t.store}/${t.key}`)).catch(() => {});
     }
 
+    // Shared groups are owned by groups/{gid} and must not be mirrored here as
+    // well, or the two paths take turns resurrecting each other's copy.
+    const sharedIds = new Set(storeState.groups.filter((g) => g.shared).map((g) => g.id));
+    const isSharedRecord = (s, record) => (s === "groups" ? sharedIds.has(record.id) : sharedIds.has(record.groupId));
+
     for (const s of ["groups", "expenses", "settlements", "events"]) {
       const remote = await mods.getDocs(mods.collection(fs, `users/${uid}/${s}`));
       const remoteIds = new Set();
       for (const d of remote.docs) {
         const r = d.data();
         if (tombstones.has(`${s}:${r.id}`) || (remoteResetAt && tsOf(r) <= remoteResetAt)) {
+          await mods.deleteDoc(d.ref).catch(() => {});
+          continue;
+        }
+        if (isSharedRecord(s, r)) {
+          // Left over from before this group was shared.
           await mods.deleteDoc(d.ref).catch(() => {});
           continue;
         }
@@ -465,6 +844,7 @@ async function runSync(expectedUid, resetAttempt = 0) {
         else if (direction === "local") await applyMirror("put", s, local, uid);
       }
       for (const l of await db.all(s)) {
+        if (isSharedRecord(s, l)) continue;
         if (!remoteIds.has(l.id) && !tombstones.has(`${s}:${l.id}`) && (!remoteResetAt || tsOf(l) > remoteResetAt)) {
           await applyMirror("put", s, l, uid);
         }
@@ -502,6 +882,7 @@ async function runSync(expectedUid, resetAttempt = 0) {
       }
     }
     for (const l of await db.all("attachments")) {
+      if (sharedIds.has(attachmentGroupId(l.id))) continue;
       if (!attIds.has(l.id) && !tombstones.has(`attachments:${l.id}`) && (!remoteResetAt || tsOf(l) > remoteResetAt)) {
         try {
           await applyMirror("put", "attachments", l, uid);
@@ -533,6 +914,7 @@ async function runSync(expectedUid, resetAttempt = 0) {
       await applyRemoteReset(uid, appliedResetAt, true);
       return runSync(uid, resetAttempt + 1);
     }
+    await syncSharedGroups();
     if (unresolvedRemoteProof) throw new Error("proof/missing-cloud-data");
     verifiedUid = uid;
     failedUid = null;

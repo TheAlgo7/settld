@@ -1,16 +1,19 @@
 {
   "name": "settld",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "private": true,
   "type": "module",
   "description": "Split. Prove. Settle. Shared expenses with proof, a transparent trail and easy UPI settlement.",
   "scripts": {
     "start": "serve -l 5173 .",
     "test": "node tests/ledger.test.mjs",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:rules": "firebase emulators:exec --only firestore --project settld-rules-test \"node tests/rules.test.mjs\""
   },
   "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.0",
     "@playwright/test": "1.61.1",
+    "firebase": "^12.1.0",
     "serve": "14.2.6"
   }
 }

@@ -33,4 +33,5 @@ Human and direct. Short sentences. Indian-English comfortable ("Clear up", "hisa
 2. Ten-second expense entry: amount, payer, participants, done. Everything else optional.
 3. Money is integer paise, rounding is deterministic, history is append-only. The ledger must never feel mushy.
 4. Free core forever: no limits on groups, members, expenses, splits or basic proof.
-5. Offline-first: IndexedDB is the source of truth. Optional Google sign-in mirrors a personal per-UID backup to Firestore and replays an outbox after reconnecting; shared-account collaboration is a separate future milestone.
+5. Offline-first: IndexedDB is the source of truth. Optional Google sign-in mirrors a personal per-UID backup to Firestore and replays an outbox after reconnecting.
+6. Sharing is opt-in and free: a group only becomes multi-user when someone invites, joining is a link plus Google sign-in, and nothing in the product may require a billing account from the maker or a payment from a user.

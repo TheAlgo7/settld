@@ -9,6 +9,7 @@ import { fmt } from "./money.js";
 export const LIMITS = Object.freeze({
   profileName: 120,
   upi: 200,
+  phone: 24,
   groupName: 160,
   memberName: 120,
   members: 100,
@@ -56,13 +57,21 @@ function emit() {
 export const uid = () =>
   crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
+// Alias for functions that take an account id called `uid` and still need to
+// mint a record id.
+const newId = uid;
+
+export const ACCENT_IDS = Object.freeze(["coral", "amber", "mint", "azure", "violet", "rose"]);
+
 export function normalizeProfile(profile, now = Date.now()) {
   if (!profile) return null;
   const themes = new Set(["dark", "light", "system"]);
   return {
     name: limited(typeof profile.name === "string" ? profile.name : "", LIMITS.profileName),
     upi: limited(typeof profile.upi === "string" ? profile.upi : "", LIMITS.upi),
+    phone: limited(typeof profile.phone === "string" ? profile.phone : "", LIMITS.phone),
     theme: themes.has(profile.theme) ? profile.theme : "dark",
+    accent: ACCENT_IDS.includes(profile.accent) ? profile.accent : "coral",
     updatedAt: Number.isInteger(profile.updatedAt) && profile.updatedAt > 0 ? profile.updatedAt : now,
   };
 }
@@ -151,6 +160,20 @@ export const eventsOf = (gid) =>
 export const allEvents = () => [...state.events].sort((a, b) => b.ts - a.ts);
 export const memberOf = (group, id) => group.members.find((m) => m.id === id);
 export const youOf = (group) => group.members.find((m) => m.isYou);
+export const isShared = (group) => Boolean(group?.shared);
+export const sharedGroupIds = () => new Set(state.groups.filter(isShared).map((g) => g.id));
+export const groupOfRecord = (record) => (record?.groupId ? groupById(record.groupId) : null);
+
+// In a shared group "you" is whoever carries your account id, so the flag is
+// recomputed per device instead of travelling inside the shared document.
+export function applyIdentity(group, uid) {
+  if (!isShared(group) || !uid) return group;
+  for (const m of group.members) {
+    if (m.uid) m.isYou = m.uid === uid;
+    else delete m.isYou;
+  }
+  return group;
+}
 
 // ---- internals ----
 
@@ -178,7 +201,7 @@ async function logEvent(groupId, type, summary, data = {}) {
 // ---- actions ----
 
 export async function saveProfile(patch) {
-  state.profile = normalizeProfile({ name: "", upi: "", theme: "dark", ...state.profile, ...patch, updatedAt: Date.now() });
+  state.profile = normalizeProfile({ name: "", upi: "", phone: "", theme: "dark", accent: "coral", ...state.profile, ...patch, updatedAt: Date.now() });
   await db.kvSet("profile", state.profile);
   emit();
 }
@@ -226,6 +249,46 @@ export async function deleteGroup(group) {
   state.settlements = state.settlements.filter((s) => s.groupId !== group.id);
   state.events = state.events.filter((e) => e.groupId !== group.id);
   emit();
+}
+
+// ---- shared group membership ----
+
+export async function markShared(group, { ownerUid, memberUids, youMemberId }) {
+  group.shared = true;
+  group.ownerUid = ownerUid;
+  group.memberUids = [...new Set(memberUids)];
+  const you = youMemberId ? memberOf(group, youMemberId) : youOf(group);
+  if (you) you.uid = ownerUid;
+  applyIdentity(group, ownerUid);
+  await touchGroup(group);
+  emit();
+  return group;
+}
+
+// Joining either claims an existing name row, so their balance carries over,
+// or adds a new person when none of the names is them.
+export async function joinAs(group, { uid, memberId, name, upi }) {
+  group.shared = true;
+  group.memberUids = [...new Set([...(group.memberUids ?? []), uid])];
+  let member = memberId ? memberOf(group, memberId) : null;
+  if (member) {
+    member.uid = uid;
+    if (name) member.name = limited(name, LIMITS.memberName);
+    if (upi) member.upi = limited(upi, LIMITS.upi);
+  } else {
+    member = {
+      id: newId(),
+      name: limited(name || "You", LIMITS.memberName),
+      upi: limited(upi ?? "", LIMITS.upi),
+      uid,
+    };
+    group.members.push(member);
+  }
+  applyIdentity(group, uid);
+  await db.put("groups", group, true);
+  if (!state.groups.some((g) => g.id === group.id)) state.groups.unshift(group);
+  emit();
+  return member;
 }
 
 export async function addMember(group, name) {
