@@ -133,7 +133,7 @@ await t("an invitee can add themselves once and nothing else", async () => {
     memberUids: [OWNER, MEMBER],
     members: [
       { id: "m1", name: "Gaurav", upi: "", uid: OWNER },
-      { id: "m2", name: "Ishita", upi: "", uid: MEMBER },
+      { id: "m2", name: "Aisha", upi: "", uid: MEMBER },
     ],
     updatedAt: 2,
   }));

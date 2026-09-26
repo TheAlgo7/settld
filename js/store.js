@@ -505,18 +505,20 @@ function receiptBlob(lines) {
   return new Promise((res) => c.toBlob(res, "image/png"));
 }
 
+// Invented people and places: this sample is shown to anyone who taps
+// "Explore a sample trip", so it must never be a real trip or real names.
 export async function seedDemo() {
   const g = await createGroup({
-    name: "Ahmedabad trip",
+    name: "Goa trip",
     emoji: "🏝️",
-    memberNames: ["Ishita", "Rushi", "Ishaan"],
+    memberNames: ["Aisha", "Rohan", "Kabir"],
   });
-  const [you, ishita, rushi, ishaan] = g.members;
+  const [you, aisha, rohan, kabir] = g.members;
   const day = 86400000;
   const t = Date.now();
   const eq = (ids) => ({ mode: "equal", participants: ids.map((id) => ({ memberId: id })) });
   const proof = await addAttachment(
-    await receiptBlob(["HOTEL SHIVAY", "2 x Deluxe room  4280.00", "GST 12%        513.60", "TOTAL         4793.60"]),
+    await receiptBlob(["SEA BREEZE INN", "2 x Deluxe room  4280.00", "GST 12%        513.60", "TOTAL         4793.60"]),
     "hotel-receipt.png",
   );
   await addExpense(g, {
@@ -525,17 +527,17 @@ export async function seedDemo() {
     category: "stay",
     date: t - 2 * day,
     payers: [{ memberId: you.id, amountP: 479360 }],
-    split: eq([you.id, ishita.id, rushi.id, ishaan.id]),
+    split: eq([you.id, aisha.id, rohan.id, kabir.id]),
     attachments: [proof],
     notes: "Deluxe rooms, breakfast included",
   });
   await addExpense(g, {
-    desc: "Manek Chowk dinner",
+    desc: "Beach shack dinner",
     amountP: 142000,
     category: "food",
     date: t - 2 * day,
-    payers: [{ memberId: rushi.id, amountP: 142000 }],
-    split: eq([you.id, ishita.id, rushi.id, ishaan.id]),
+    payers: [{ memberId: rohan.id, amountP: 142000 }],
+    split: eq([you.id, aisha.id, rohan.id, kabir.id]),
     attachments: [],
     notes: "",
   });
@@ -544,21 +546,21 @@ export async function seedDemo() {
     amountP: 64500,
     category: "travel",
     date: t - 2 * day,
-    payers: [{ memberId: ishita.id, amountP: 64500 }],
-    split: eq([you.id, ishita.id, rushi.id, ishaan.id]),
+    payers: [{ memberId: aisha.id, amountP: 64500 }],
+    split: eq([you.id, aisha.id, rohan.id, kabir.id]),
     attachments: [],
     notes: "",
   });
   await addExpense(g, {
-    desc: "Sabarmati riverfront tickets",
+    desc: "Fort Aguada tickets",
     amountP: 48000,
     category: "tickets",
     date: t - day,
-    payers: [{ memberId: ishaan.id, amountP: 48000 }],
-    split: eq([ishita.id, rushi.id, ishaan.id]),
+    payers: [{ memberId: kabir.id, amountP: 48000 }],
+    split: eq([aisha.id, rohan.id, kabir.id]),
     attachments: [],
     notes: "You skipped this one",
   });
-  await addSettlement(g, { fromId: ishaan.id, toId: you.id, amountP: 100000, note: "GPay" });
+  await addSettlement(g, { fromId: kabir.id, toId: you.id, amountP: 100000, note: "GPay" });
   return g;
 }

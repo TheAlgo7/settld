@@ -13,7 +13,7 @@ async function startWith(page, name) {
   await page.getByLabel("Your name").fill(name);
   await page.getByRole("button", { name: "Get started" }).click();
   await page.getByRole("button", { name: "Explore a sample trip" }).click();
-  await expect(page.getByRole("heading", { name: "Ahmedabad trip" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Goa trip" })).toBeVisible();
 }
 
 const attachmentCount = (page) =>
@@ -51,7 +51,7 @@ test("a group reads as one screen: position, who owes whom, then expenses", asyn
   await expect(page.getByRole("heading", { name: "Groups" })).toBeVisible();
 
   await page.getByRole("button", { name: "Explore a sample trip" }).click();
-  await expect(page.getByRole("heading", { name: "Ahmedabad trip" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Goa trip" })).toBeVisible();
 
   // The old four-tab group screen is gone; everything is on one surface.
   await expect(page.getByRole("tab")).toHaveCount(0);
@@ -107,7 +107,7 @@ test("a group reads as one screen: position, who owes whom, then expenses", asyn
   await page.getByRole("button", { name: "Back to groups" }).click();
   await page.getByRole("link", { name: "Friends" }).click();
   await expect(page.getByRole("heading", { name: "Friends" })).toBeVisible();
-  await expect(page.getByRole("button", { name: /Ishita/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Aisha/ })).toBeVisible();
 
   await page.getByRole("link", { name: "You" }).click();
   await page.getByRole("button", { name: "Light" }).click();
@@ -129,7 +129,7 @@ test("a group reads as one screen: position, who owes whom, then expenses", asyn
   await context.setOffline(false);
 
   await page.setViewportSize({ width: 320, height: 720 });
-  await page.getByRole("button", { name: /Ahmedabad trip/ }).click();
+  await page.getByRole("button", { name: /Goa trip/ }).click();
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await expect(page.getByRole("button", { name: "Add expense" })).toBeVisible();
 
@@ -181,7 +181,7 @@ test("an invite link resolves to a join screen that needs an account", async ({ 
 
   await page.goto(`/#/join/${gid}`);
   // Already a member of this local group, so it just opens.
-  await expect(page.getByRole("heading", { name: "Ahmedabad trip" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Goa trip" })).toBeVisible();
 
   await page.goto("/#/join/some-other-group-id");
   await expect(page.getByRole("heading", { name: "Join group" })).toBeVisible();
