@@ -1325,7 +1325,7 @@ function welcomeNameSheet(prefill) {
       <p>Your name appears on expenses and in the history. UPI can wait.</p>
     </div>
     <label class="cap-label" for="w-name">Your name</label>
-    <input class="in" id="w-name" placeholder="Gaurav" autocomplete="name" value="${esc(prefill)}" maxlength="${store.LIMITS.profileName}">
+    <input class="in" id="w-name" placeholder="Your name" autocomplete="name" value="${esc(prefill)}" maxlength="${store.LIMITS.profileName}">
     <label class="cap-label" for="w-upi">Your UPI ID <span class="dim">(optional)</span></label>
     <input class="in" id="w-upi" placeholder="name@bank" autocapitalize="none" maxlength="${store.LIMITS.upi}">
   </div>`);
