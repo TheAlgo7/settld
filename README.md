@@ -1,18 +1,50 @@
-# Settld
+<p align="center">
+  <img src="docs/readme/hero.png" alt="Settld: split, prove, settle" width="100%">
+</p>
 
-**Split. Prove. Settle.**
+<p align="center">
+  <strong>Shared expenses for trips, homes and groups, with the receipt, the payment proof and every edit kept together.</strong><br>
+  Offline-first, no account needed to start, and a settle plan of at most one transfer per person.
+</p>
 
-Settld is an offline-first shared-expense PWA for trips, homes, and groups. It keeps splits, receipt or payment proof, balances, and an append-only activity trail together without putting core use behind an account.
+<p align="center">
+  <a href="https://settld-ruddy.vercel.app"><strong>Open Settld</strong></a>
+  &nbsp;·&nbsp;
+  <a href="#features">Features</a>
+  &nbsp;·&nbsp;
+  <a href="#data-and-firebase">Data and Firebase</a>
+  &nbsp;·&nbsp;
+  <a href="#run-locally">Run locally</a>
+</p>
 
-Production: [settld-ruddy.vercel.app](https://settld-ruddy.vercel.app)
+<p align="center">
+  <img alt="Version 0.4" src="https://img.shields.io/badge/version-0.4-FF6F61?style=flat-square&labelColor=111111">
+  <img alt="Offline-first PWA" src="https://img.shields.io/badge/PWA-offline--first-FF6F61?style=flat-square&labelColor=111111">
+  <img alt="Firebase" src="https://img.shields.io/badge/Firebase-free%20tier-FF6F61?style=flat-square&labelColor=111111">
+  <img alt="Money in paise" src="https://img.shields.io/badge/money-integer%20paise-FF6F61?style=flat-square&labelColor=111111">
+</p>
 
-Designed and built by [Gaurav Kumar · The Algothrim](https://thealgothrim.com).
+## Why Settld
 
-## Status
+Splitting apps are good at the maths and bad at the argument that comes after it. "Did you actually pay the hotel?" "Who changed this to ₹900?" Settld keeps the proof with the expense: the bill, the UPI screenshot, and an append-only trail of every edit, deletion and payment.
 
-Version 0.4.0 is a static, installable PWA with no application server or build step. IndexedDB is the source of truth, the service worker supports offline use, and every core flow also works in local mode without signing in.
+It works on the device first. IndexedDB is the source of truth, every core flow works without signing in, and signing in with Google only adds a backup and shared groups.
 
-The current release includes:
+Settld calculates and records suggested payments; **it does not hold funds, initiate transfers or process payments**.
+
+## Screenshots
+
+<table>
+  <tr>
+    <td align="center"><img src="docs/readme/group.png" width="160" alt="A group"><br><sub>A group on one screen</sub></td>
+    <td align="center"><img src="docs/readme/expense.png" width="160" alt="An expense with proof"><br><sub>An expense and its proof</sub></td>
+    <td align="center"><img src="docs/readme/settle.png" width="160" alt="Settle up"><br><sub>The settle plan</sub></td>
+    <td align="center"><img src="docs/readme/activity.png" width="160" alt="Activity"><br><sub>Every change, kept</sub></td>
+    <td align="center"><img src="docs/readme/light.png" width="160" alt="Light theme"><br><sub>The light theme</sub></td>
+  </tr>
+</table>
+
+## Features
 
 - Groups, members, and equal, exact, percentage, or shares-based expense splits
 - A group as one scrolling screen: your position, who owes whom, then expenses by day
@@ -23,8 +55,7 @@ The current release includes:
 - Optional UPI deep links that open the user's payment app
 - Dark and light themes, each designed rather than inverted, plus six selectable accents
 - Responsive layouts, keyboard focus states, accessible sheets, and 48 px minimum touch targets
-
-Settld calculates and records suggested payments; **it does not hold funds, initiate transfers, or process payments**.
+- An invented sample trip to explore before creating anything
 
 ## Data and Firebase
 
@@ -75,6 +106,8 @@ npm run test:rules  # Firestore security rules, multi-user, on the emulator
 
 `test:rules` runs the Firestore emulator, which needs a JDK at version 21 or above on `PATH`.
 
+`python scripts/readme-shots.py` rebuilds the screenshots in this README from the live app, in local mode with the sample trip.
+
 Playwright starts the local server when one is not already running. GitHub Actions runs both suites for pull requests and pushes to `main`.
 
 ## Deploy
@@ -87,7 +120,7 @@ Firestore rule changes are deployed explicitly:
 firebase deploy --only firestore:rules --project settld-in
 ```
 
-**0.4.0 requires a rules deploy.** The profile document gained `phone` and `accent`. The deployed rules pin the exact key set, so until the command above runs, signed-in devices keep working locally but their profile backup write is rejected and the sync status reports a paused backup. Nothing else is affected.
+The deployed rules pin each document's exact key set, so a new field on any synced record needs a rules deploy before the release that writes it. The v0.4 rules (profile `phone` and `accent`) are live.
 
 ### Content Security Policy
 
@@ -115,6 +148,7 @@ tests/ledger.test.mjs      Ledger unit tests
 tests/e2e/app.spec.mjs     Playwright product-flow coverage
 firestore.rules            Per-UID Firestore access policy
 PRODUCT.md                 Product scope and principles
+scripts/readme-shots.py    README screenshots
 DESIGN.md                  Visual system and component rules
 ```
 
@@ -125,3 +159,7 @@ DESIGN.md                  Visual system and component rules
 - Shared groups sync on foreground, not in realtime, to stay inside the free tier
 - Proof stored in Firestore is subject to the document-size guard in `js/cloud.js`
 - No way to find someone by phone number, because verifying one costs money
+
+## Licence
+
+Copyright © 2026 Gaurav Kumar, [The Algothrim](https://thealgothrim.com). All rights reserved.
