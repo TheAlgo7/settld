@@ -163,3 +163,5 @@ DESIGN.md                  Visual system and component rules
 ## Licence
 
 Copyright © 2026 Gaurav Kumar, [The Algothrim](https://thealgothrim.com). All rights reserved.
+
+The code is public to read and learn from. It is not licensed for reuse.
