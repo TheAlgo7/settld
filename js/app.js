@@ -165,7 +165,7 @@ function applyTheme(pref) {
       ? (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark")
       : pref || "dark";
   document.documentElement.dataset.theme = resolved;
-  $('meta[name="theme-color"]').setAttribute("content", resolved === "light" ? "#F5F2EC" : "#0B0C0D");
+  $('meta[name="theme-color"]').setAttribute("content", resolved === "light" ? "#F5F2EC" : "#090807");
   localStorage.setItem("settld-theme", pref || "dark");
 }
 
