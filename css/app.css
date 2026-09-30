@@ -1853,11 +1853,23 @@ button.ex-row:hover {
 }
 
 .expense-hero .val {
+  display: flex;
+  align-items: flex-start;
+  gap: 3px;
   margin-top: 8px;
-  font-size: 40px;
-  font-weight: 700;
-  letter-spacing: -0.04em;
-  line-height: 1.05;
+  font-size: 46px;
+  font-weight: 660;
+  letter-spacing: -0.045em;
+  line-height: 1;
+  font-variation-settings: "opsz" 32;
+}
+
+.expense-hero .val .rupee {
+  margin-top: 0.12em;
+  color: var(--text-3);
+  font-size: 0.55em;
+  font-weight: 520;
+  letter-spacing: 0;
 }
 
 .expense-hero .note {
@@ -1868,10 +1880,8 @@ button.ex-row:hover {
 
 .expense-hero blockquote {
   margin-top: 12px;
-  padding-left: 13px;
-  border-left: 2px solid var(--line-2);
   color: var(--text-2);
-  font-size: 14px;
+  font-size: 15px;
   font-style: italic;
 }
 
@@ -2300,7 +2310,7 @@ button.ex-row:hover {
   }
 
   .settle-row .btn {
-    width: 100%;
+    width: calc(100% - 46px);
     margin-left: 46px;
   }
 }

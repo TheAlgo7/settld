@@ -909,7 +909,7 @@ function settlementDetailSheet(g, settlement) {
   const body = el(`<div>
     <div class="expense-hero">
       <div class="expense-hero-top"><span>${settlement.deleted ? "Reversed payment" : "Recorded payment"}</span><span>${dayLabel(settlement.createdAt)}</span></div>
-      <div class="val money">${fmt(settlement.amountP)}</div>
+      <div class="val money">${heroMoney(settlement.amountP)}</div>
       <div class="note">${esc(displayName(from))} paid ${esc(displayName(to))}.</div>
       ${settlement.note ? `<blockquote>${esc(settlement.note)}</blockquote>` : ""}
     </div>
@@ -2147,7 +2147,7 @@ function expenseDetailSheet(g, e) {
   const body = el(`<div>
     <div class="expense-hero">
       <div class="expense-hero-top"><span>${catOf(e.category).emoji} ${esc(catOf(e.category).label)}</span><span>${dayLabel(e.date)}</span></div>
-      <div class="val money">${fmt(e.amountP)}</div>
+      <div class="val money">${heroMoney(e.amountP)}</div>
       <div class="note">Paid by ${esc(paidBy)}. Split ${modeLabel} between ${e.split.participants.length}.</div>
       ${e.notes ? `<blockquote>${esc(e.notes)}</blockquote>` : ""}
       <div class="proof-status ${e.attachments?.length ? "has-proof" : "no-proof"}">${e.attachments?.length ? `${I.clip}<span><strong>Proof attached</strong><small>${e.attachments.length} image${e.attachments.length === 1 ? "" : "s"} kept with this expense</small></span>` : `${I.receipt}<span><strong>No proof attached</strong><small>Add the receipt now or whenever you find it</small></span><button class="btn quiet small detail-add-proof">Add</button>`}</div>

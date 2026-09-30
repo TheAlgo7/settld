@@ -48,10 +48,6 @@
     {
       "source": "/__/auth/:path*",
       "destination": "https://settld-in.firebaseapp.com/__/auth/:path*"
-    },
-    {
-      "source": "/__/firebase/:path*",
-      "destination": "https://settld-in.firebaseapp.com/__/firebase/:path*"
     }
   ]
 }
