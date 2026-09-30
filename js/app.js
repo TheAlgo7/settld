@@ -959,6 +959,10 @@ function SettingsScreen() {
         <span class="grow"><span class="ttl danger-text">Erase all data</span>
         <span class="cap">${cloud.currentUser() ? "Deletes this device copy and your Firebase backup" : "Removes every group and receipt from this device"}</span></span>
       </button>
+      ${cloud.currentUser() ? `<button class="row pressable" id="st-delete">
+        <span class="grow"><span class="ttl danger-text">Delete account</span>
+        <span class="cap">Erases your data, leaves shared groups and deletes your Google sign-in</span></span>
+      </button>` : ""}
     </div>
 
     <div class="empty" style="padding-top:40px">
@@ -1106,8 +1110,46 @@ function SettingsScreen() {
     toast(cloudErase?.cleanupPending ? "Data erased. Cloud cleanup will finish next time you sign in." : "All data erased");
   });
 
+  const deleteBtn = $("#st-delete", view);
+  let deleteArmed = false;
+  deleteBtn?.addEventListener("click", async () => {
+    const ttl = deleteBtn.querySelector(".ttl");
+    const reset = () => {
+      deleteBtn.disabled = false;
+      deleteArmed = false;
+      ttl.textContent = "Delete account";
+    };
+    if (!deleteArmed) {
+      deleteArmed = true;
+      ttl.textContent = "Tap again to delete your account";
+      setTimeout(() => {
+        if (deleteBtn.isConnected && !deleteBtn.disabled) reset();
+      }, 2600);
+      return;
+    }
+    deleteBtn.disabled = true;
+    await finishAccountDeletion(reset);
+  });
+
   setAppbar({ title: "You" });
   return view;
+}
+
+// Also runs at boot when the app comes back from confirming with Google.
+async function finishAccountDeletion(onFail) {
+  let result;
+  try {
+    result = await cloud.deleteAccount();
+  } catch (error) {
+    onFail?.();
+    toast(error?.message === "cloud/offline" ? "Connect to the internet to delete your account" : "Couldn't delete the account. Try again.");
+    return;
+  }
+  if (result.redirected) return;
+  await store.eraseAll(result);
+  location.hash = "#/";
+  await welcomeSheet();
+  toast("Account deleted");
 }
 
 /* ---------- trip summary ---------- */
@@ -1483,7 +1525,10 @@ function inviteSheet(g) {
       try {
         const info = await cloud.shareGroup(g);
         await store.markShared(g, info);
-        closeSheet(false, () => inviteSheet(store.groupById(g.id)));
+        // A backup sync can reload the group list while sharing runs, leaving
+        // state with a copy that never saw markShared; reread from disk.
+        await store.init();
+        closeSheet(false, () => inviteSheet(store.groupById(g.id) ?? g));
         toast("Sharing is on");
       } catch {
         foot.disabled = false;
@@ -2243,6 +2288,10 @@ store.init().then(async () => {
       await cloud.initCloud();
       await Promise.race([cloud.authReady, new Promise((resolve) => setTimeout(resolve, 5000))]);
       if (cloud.currentUser()) await authRestoreTask;
+      if (cloud.takePendingDeletion()) {
+        await finishAccountDeletion();
+        return;
+      }
     } catch {
       /* local mode remains fully usable when Firebase cannot load */
     }

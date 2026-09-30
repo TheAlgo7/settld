@@ -174,6 +174,42 @@ await t("history is append-only for everyone, including the owner", async () => 
   await assertFails(deleteDoc(doc(owner, "groups", GID, "events", "v1")));
 });
 
+await t("an owner left alone in the group may clear its history", async () => {
+  const event = { id: "v1", groupId: GID, ts: 1, actor: "Gaurav", type: "expense", summary: "added dinner", data: {} };
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), "groups", GID), groupDoc());
+    await setDoc(doc(ctx.firestore(), "groups", GID, "events", "v1"), event);
+  });
+  await assertFails(deleteDoc(doc(outsider, "groups", GID, "events", "v1")));
+  await assertSucceeds(deleteDoc(doc(owner, "groups", GID, "events", "v1")));
+});
+
+await t("deleting an account leaves shared groups: the rest keep the ledger", async () => {
+  const both = [
+    { id: "m1", name: "Gaurav", upi: "", uid: OWNER },
+    { id: "m2", name: "Aisha", upi: "", uid: MEMBER },
+  ];
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), "groups", GID), groupDoc({ memberUids: [OWNER, MEMBER], members: both }));
+  });
+  // A member steps out; their row stays on past entries without a login.
+  await assertSucceeds(updateDoc(doc(member, "groups", GID), {
+    memberUids: [OWNER],
+    members: [both[0], { ...both[1], uid: null }],
+    updatedAt: 2,
+  }));
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), "groups", GID), groupDoc({ memberUids: [OWNER, MEMBER], members: both }));
+  });
+  // The owner can step out too; the group carries on for the others.
+  await assertSucceeds(updateDoc(doc(owner, "groups", GID), {
+    memberUids: [MEMBER],
+    members: [{ ...both[0], uid: null }, both[1]],
+    updatedAt: 2,
+  }));
+  await assertSucceeds(getDoc(doc(member, "groups", GID)));
+});
+
 await t("only the owner deletes the group", async () => {
   await env.withSecurityRulesDisabled(async (ctx) => {
     await setDoc(doc(ctx.firestore(), "groups", GID), groupDoc({ memberUids: [OWNER, MEMBER] }));

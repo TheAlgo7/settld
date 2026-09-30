@@ -99,14 +99,19 @@ service cloud.firestore {
 
     match /groups/{gid}/events/{id} {
       allow read: if memberOfGroup(gid);
-      // History is append-only for everyone, including the group owner.
+      // History is append-only for everyone, including the group owner, while
+      // anyone else is in the group. An owner who is the only member left may
+      // clear it along with the group (deleting their account or the group).
       allow create: if memberOfGroup(gid)
         && request.resource.data.keys().hasOnly(['id', 'groupId', 'ts', 'actor', 'type', 'summary', 'data'])
         && request.resource.data.id == id
         && request.resource.data.groupId == gid
         && request.resource.data.summary is string
         && request.resource.data.summary.size() <= 1000;
-      allow update, delete: if false;
+      allow update: if false;
+      allow delete: if memberOfGroup(gid)
+        && groupOf(gid).ownerUid == request.auth.uid
+        && groupOf(gid).memberUids.size() == 1;
     }
 
     match /groups/{gid}/attachments/{id} {

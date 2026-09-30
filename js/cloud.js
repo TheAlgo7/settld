@@ -70,6 +70,8 @@ export const authReady = new Promise((r) => {
   authReadyResolve = r;
 });
 
+let redirectResult = null;
+
 export async function initCloud() {
   if (!cloudReady) return;
   const [a, au, f] = await Promise.all([
@@ -81,11 +83,17 @@ export async function initCloud() {
   const app = a.initializeApp(firebaseConfig);
   auth = au.getAuth(app);
   fs = f.getFirestore(app);
+  // Local testing only: on a localhost server, localStorage "settld.emulators"
+  // = "1" points the app at the Firebase emulators (tests/e2e/delete-account).
+  if (["localhost", "127.0.0.1"].includes(location.hostname) && localStorage.getItem("settld.emulators") === "1") {
+    au.connectAuthEmulator(auth, "http://127.0.0.1:9099", { disableWarnings: true });
+    f.connectFirestoreEmulator(fs, "127.0.0.1", 8080);
+  }
   available = true;
   // Completes a redirect sign-in started on a previous page load. It has to
   // run before the auth listener settles, otherwise a returning redirect looks
   // like a signed-out boot and the welcome sheet flashes.
-  await au.getRedirectResult(auth).catch(() => null);
+  redirectResult = await au.getRedirectResult(auth).catch(() => null);
   addEventListener("online", () => syncNow().catch(() => {}));
   au.onAuthStateChanged(auth, (u) => {
     user = u;
@@ -223,7 +231,9 @@ function attachmentGroupId(attachmentId) {
 function sharedGroupIdFor(storeName, payload) {
   if (storeName === "groups") {
     const gid = typeof payload === "string" ? payload : payload?.id;
-    return isSharedGroup(gid) ? gid : null;
+    // The record itself is the truth: the in-memory list can be a copy that a
+    // background sync loaded before markShared ran.
+    return payload?.shared || isSharedGroup(gid) ? gid : null;
   }
   if (storeName === "attachments") {
     const id = typeof payload === "string" ? payload : payload?.id;
@@ -995,4 +1005,91 @@ export async function eraseCloudData() {
     erasingUid = null;
     throw error;
   }
+}
+
+/* ---- delete account ---- */
+
+// Google Play requires deleting the account itself, not only its data.
+// Firebase deletes only an account signed into in the last few minutes, so an
+// older session confirms with Google first. Installed apps can't open the
+// popup, so there the confirmation is a redirect and boot finishes the job
+// (takePendingDeletion).
+
+const PENDING_DELETE = "settld.pendingDelete";
+
+function signedInRecently(u) {
+  const at = Date.parse(u?.metadata?.lastSignInTime ?? "");
+  return Number.isFinite(at) && Date.now() - at < 4 * 60_000;
+}
+
+async function confirmByRedirect(u, provider) {
+  localStorage.setItem(PENDING_DELETE, u.uid);
+  await mods.reauthenticateWithRedirect(u, provider);
+}
+
+// Leaves every shared group, so the people still in it keep their ledger;
+// your member row stays on past entries without a linked account. A group
+// nobody else ever joined is deleted outright, history included.
+async function leaveSharedGroups(uid) {
+  for (const g of storeState.groups.filter((x) => x.shared)) {
+    const snap = await mods.getDoc(groupRef(g.id)).catch(() => null);
+    if (!snap?.exists()) continue;
+    const remote = snap.data();
+    if (!(remote.memberUids ?? []).includes(uid)) continue;
+    const others = remote.memberUids.filter((u) => u !== uid);
+    if (!others.length && remote.ownerUid === uid) {
+      for (const sub of ["expenses", "settlements", "attachments", "events"]) await deleteSharedCollection(g.id, sub);
+      await mods.deleteDoc(groupRef(g.id));
+    } else {
+      await mods.updateDoc(groupRef(g.id), {
+        memberUids: others,
+        members: (remote.members ?? []).map((m) => (m.uid === uid ? { ...m, uid: null } : m)),
+        updatedAt: Date.now(),
+      });
+    }
+  }
+}
+
+/**
+ * Leaves shared groups, erases the personal backup, then deletes the login.
+ * Returns { redirected: true } when the page is leaving to confirm with
+ * Google, otherwise the erase result for store.eraseAll().
+ */
+export async function deleteAccount() {
+  user = auth?.currentUser ?? user;
+  if (!user) throw new Error("cloud/signed-out");
+  if (!navigator.onLine) throw new Error("cloud/offline");
+  if (!signedInRecently(user)) {
+    const provider = new mods.GoogleAuthProvider();
+    if (standalone()) {
+      await confirmByRedirect(user, provider);
+      return { redirected: true };
+    }
+    try {
+      await mods.reauthenticateWithPopup(user, provider);
+    } catch (error) {
+      if (!POPUP_UNAVAILABLE.has(error?.code)) throw error;
+      await confirmByRedirect(user, provider);
+      return { redirected: true };
+    }
+  }
+  const target = user;
+  await leaveSharedGroups(target.uid);
+  const erased = await eraseCloudData();
+  await mods.deleteDoc(userRef(target.uid, "meta/state")).catch(() => {});
+  await mods.deleteUser(target);
+  erasingUid = null;
+  return { redirected: false, ...erased };
+}
+
+/** True once, on the boot that returns from confirming a deletion with Google. */
+export function takePendingDeletion() {
+  let pending = null;
+  try {
+    pending = localStorage.getItem(PENDING_DELETE);
+    localStorage.removeItem(PENDING_DELETE);
+  } catch {
+    return false;
+  }
+  return Boolean(pending && redirectResult?.operationType === "reauthenticate" && auth?.currentUser?.uid === pending);
 }
