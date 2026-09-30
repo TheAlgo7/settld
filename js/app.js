@@ -1003,6 +1003,7 @@ function SettingsScreen() {
       <h3>Settld 0.5</h3>
       <p>Split. Prove. Settle.<br>Core splitting stays free. Your device remains the source of truth.</p>
       <a class="made-by" href="https://thealgothrim.com" target="_blank" rel="noopener">Designed and built by Gaurav Kumar · The Algothrim</a>
+      <div><a class="made-by" href="privacy.html">Privacy</a></div>
     </div>
   </div>`);
 
