@@ -278,3 +278,24 @@ test("signed-out hard deletes leave a durable local tombstone", async ({ page })
     return outbox.some((item) => item.op === "del" && item.store === "groups");
   })).toBe(true);
 });
+
+test("the dock's + starts a group, then adds straight into the only one", async ({ page }) => {
+  await page.goto("/");
+  await continueLocally(page);
+  await page.getByLabel("Your name").fill("Quick");
+  await page.getByRole("button", { name: "Get started" }).click();
+  await expect(page.getByRole("heading", { name: "Groups" })).toBeVisible();
+
+  const add = page.getByRole("navigation", { name: "Main" }).getByRole("button", { name: "Add expense" });
+  await add.click();
+  await expect(page.getByRole("heading", { name: "New group" })).toBeVisible();
+  await page.getByRole("button", { name: "Close" }).click();
+
+  await page.getByRole("button", { name: "Explore a sample trip" }).click();
+  await expect(page.getByRole("heading", { name: "Goa trip" })).toBeVisible();
+  // On a group screen the dock steps aside for the group's own buttons.
+  await expect(add).toBeHidden();
+  await page.goto("/#/");
+  await add.click();
+  await expect(page.getByRole("heading", { name: "Add expense" })).toBeVisible();
+});

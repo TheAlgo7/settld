@@ -39,11 +39,14 @@
 
   <div id="app"><main id="screen"></main></div>
 
-  <nav id="dock" class="glass" aria-label="Main">
-    <a href="#/" data-tab="home"></a>
-    <a href="#/friends" data-tab="friends"></a>
-    <a href="#/activity" data-tab="activity"></a>
-    <a href="#/settings" data-tab="settings"></a>
+  <nav id="dock" aria-label="Main">
+    <div class="dock-glass">
+      <a href="#/" data-tab="home"></a>
+      <a href="#/friends" data-tab="friends"></a>
+      <a href="#/activity" data-tab="activity"></a>
+      <a href="#/settings" data-tab="settings"></a>
+    </div>
+    <button type="button" class="dock-add" aria-label="Add expense"></button>
   </nav>
 
   <div id="sheets"></div>

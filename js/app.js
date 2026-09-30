@@ -6,6 +6,10 @@ import * as store from "./store.js";
 import * as cloud from "./cloud.js";
 import { fmt, toPaise, fromPaise, computeShares } from "./money.js";
 import { computeBalances, simplify, totalSpend, upiLink } from "./settle.js";
+import { liquidGlass } from "./glass.js";
+
+// A hero amount, set like Dueline's: the rupee sign small and muted, the digits large.
+const heroMoney = (paise) => `<span class="rupee">₹</span>${fmt(paise).replace(/^₹\s?/, "")}`;
 
 /* ---------- constants ---------- */
 
@@ -382,8 +386,33 @@ function initDock() {
   };
   for (const a of document.querySelectorAll("#dock a")) {
     const [label, icon] = tabs[a.dataset.tab];
-    a.innerHTML = `${icon}<span>${label}</span>`;
+    a.setAttribute("aria-label", label);
+    a.innerHTML = `${icon}<span class="label">${label}</span>`;
   }
+  const add = $("#dock .dock-add");
+  add.innerHTML = I.plus;
+  add.addEventListener("click", quickAdd);
+  liquidGlass($("#dock .dock-glass"), "settld-dock-glass");
+}
+
+// The one global action, like Dueline's +: an expense, into the only group
+// there is, or into the one you pick. With no group yet it starts one.
+function quickAdd() {
+  const groups = [...store.state.groups].sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
+  if (!groups.length) return newGroupSheet();
+  if (groups.length === 1) return expenseSheet(groups[0]);
+  const body = el(`<div class="list"></div>`);
+  for (const g of groups) {
+    const row = el(`<button class="row group-row pressable">
+      <span class="tile">${esc(g.emoji ?? "🧾")}</span>
+      <span class="grow"><span class="ttl">${esc(g.name)}</span>
+        <span class="cap">${g.members.length} people</span></span>
+      <span class="chev">${I.chevR}</span>
+    </button>`);
+    row.addEventListener("click", () => closeSheet(false, () => expenseSheet(g)));
+    body.append(row);
+  }
+  openSheet({ title: "Add to which group?", body });
 }
 
 /* ---------- router ---------- */
@@ -422,7 +451,11 @@ function render() {
   hydrate(view);
 
   const dock = $("#dock");
-  dock.classList.toggle("off", route.name === "group" || route.name === "join");
+  const dockOff = route.name === "group" || route.name === "join";
+  dock.classList.toggle("off", dockOff);
+  dock.inert = dockOff;
+  if (dockOff) dock.setAttribute("aria-hidden", "true");
+  else dock.removeAttribute("aria-hidden");
   for (const a of dock.querySelectorAll("a")) {
     const active = a.dataset.tab === (route.name === "home" ? "home" : route.name);
     a.classList.toggle("on", active);
@@ -601,8 +634,8 @@ function FriendsScreen() {
 function friendSheet(friend) {
   const body = el(`<div>
     <div class="money-block" style="margin-top:4px">
-      <div class="lbl">${friend.net === 0 ? "Between you" : friend.net > 0 ? `${esc(friend.name)} owes you` : `You owe ${esc(friend.name)}`}</div>
-      <div class="val money ${friend.net > 0 ? "pos" : friend.net < 0 ? "debt" : ""}">${friend.net === 0 ? "All clear" : fmt(Math.abs(friend.net))}</div>
+      <div class="lbl ${friend.net > 0 ? "pos" : ""}">${friend.net === 0 ? "Between you" : friend.net > 0 ? `${esc(friend.name)} owes you` : `You owe ${esc(friend.name)}`}</div>
+      <div class="val money ${friend.net === 0 ? "clear" : ""}">${friend.net === 0 ? "All clear" : heroMoney(Math.abs(friend.net))}</div>
     </div>
     <div class="section-cap">Group by group</div>
     <div class="list ruled friend-groups"></div>
@@ -687,8 +720,8 @@ function GroupScreen(id) {
     <div class="group-people">${avatarStackHtml(g.members)}<span>${esc(nameList(g.members))}</span></div>
 
     <div class="money-block">
-      <div class="lbl">${net > 0 ? "You get back" : net < 0 ? "You owe" : "Your balance"}</div>
-      <div class="val money ${net > 0 ? "pos" : net < 0 ? "debt" : ""}">${net === 0 ? "All clear" : fmt(Math.abs(net))}</div>
+      <div class="lbl ${net > 0 ? "pos" : ""}">${net > 0 ? "You get back" : net < 0 ? "You owe" : "Your balance"}</div>
+      <div class="val money ${net === 0 ? "clear" : ""}">${net === 0 ? "All clear" : heroMoney(Math.abs(net))}</div>
       <div class="note">${net === 0 ? "Hisab barabar. Nothing is pending in this group." : `${fmt(totalSpend(exps))} spent across ${exps.length} expense${exps.length === 1 ? "" : "s"}`}</div>
     </div>
 
@@ -967,7 +1000,7 @@ function SettingsScreen() {
 
     <div class="empty" style="padding-top:40px">
       <div class="mark">${MARK}</div>
-      <h3>Settld 0.4</h3>
+      <h3>Settld 0.5</h3>
       <p>Split. Prove. Settle.<br>Core splitting stays free. Your device remains the source of truth.</p>
       <a class="made-by" href="https://thealgothrim.com" target="_blank" rel="noopener">Designed and built by Gaurav Kumar · The Algothrim</a>
     </div>
@@ -1284,7 +1317,7 @@ async function welcomeSheet() {
 
 function authOptions(onSignedIn) {
   const box = el(`<div>
-    <button class="btn primary au-google">Continue with Google</button>
+    <button class="btn google au-google">Continue with Google</button>
   </div>`);
   $(".au-google", box).addEventListener("click", async (e) => {
     const button = e.currentTarget;

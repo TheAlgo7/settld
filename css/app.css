@@ -1,4 +1,8 @@
-/* Settld 0.4 design system.
+/* Settld 0.5 design system, in Dueline's family.
+ *
+ * Matte near-black, warm by a hair, the same surfaces, type and components as
+ * Dueline (rows with glyph tiles, pill buttons, a liquid-glass dock with one
+ * solid action), with Settld's own mark and the accent the person picks.
  *
  * Type carries the interface. Lists are hairline-separated rows sitting on the
  * page surface rather than stacked cards, so the amount is always the loudest
@@ -20,18 +24,20 @@
   /* accent defaults to coral; [data-accent] blocks below swap the triple */
   --a-fill: oklch(0.72 0.185 31);
   --a-text: oklch(0.78 0.16 31);
-  --a-ink: oklch(0.15 0.01 260);
+  --a-ink: oklch(0.2 0.035 45);
 
-  --bg: oklch(0.135 0.006 255);
-  --bg-2: oklch(0.175 0.007 255);
-  --raised: oklch(0.215 0.008 255);
-  --line: oklch(0.255 0.008 255);
-  --line-2: oklch(0.33 0.01 255);
-  --text: oklch(0.965 0.011 85);
-  --text-2: oklch(0.685 0.013 255);
-  --text-3: oklch(0.53 0.012 255);
+  /* Dueline's surfaces: bg, sheet (bg-2), field and tile (raised), pressed. */
+  --bg: oklch(0.135 0.003 70);
+  --bg-2: oklch(0.172 0.004 70);
+  --raised: oklch(0.205 0.005 70);
+  --raised-2: oklch(0.25 0.006 70);
+  --line: oklch(0.215 0.004 70);
+  --line-2: oklch(0.275 0.005 70);
+  --text: oklch(0.965 0.006 85);
+  --text-2: oklch(0.76 0.009 80);
+  --text-3: oklch(0.62 0.01 78);
 
-  --pos: oklch(0.82 0.17 156);
+  --pos: oklch(0.8 0.13 156);
   --debt: var(--text);
   --danger: oklch(0.72 0.18 22);
   --warning: oklch(0.82 0.15 80);
@@ -39,13 +45,18 @@
   --accent: var(--a-fill);
   --accent-text: var(--a-text);
   --accent-ink: var(--a-ink);
-  --accent-soft: color-mix(in oklab, var(--a-fill) 17%, var(--bg));
+  --accent-soft: color-mix(in oklab, var(--a-fill) 15%, var(--bg));
+  --accent-glow: color-mix(in oklab, var(--a-fill) 38%, transparent);
   --glass-bg: color-mix(in oklab, var(--bg-2) 72%, transparent);
-  --glass-line: color-mix(in oklab, var(--text) 12%, transparent);
-  --scrim: color-mix(in oklab, oklch(0.06 0.004 255) 74%, transparent);
-  --shadow: 0 20px 60px color-mix(in oklab, oklch(0.05 0 0) 72%, transparent);
-  --shadow-soft: 0 8px 26px color-mix(in oklab, oklch(0.05 0 0) 48%, transparent);
-  --control-border: oklch(0.54 0.01 255);
+  --glass-line: color-mix(in oklab, var(--text) 10%, transparent);
+  --dock-glass: oklch(0.2 0.005 70 / 0.9);
+  --dock-liquid: oklch(0.17 0.005 70 / 0.55);
+  --dock-tab-on: oklch(1 0 0 / 0.11);
+  --toast-bg: oklch(0.26 0.006 70);
+  --scrim: oklch(0 0 0 / 0.62);
+  --shadow: 0 -20px 60px -20px oklch(0 0 0 / 0.8);
+  --shadow-soft: 0 14px 40px -10px oklch(0 0 0 / 0.85);
+  --control-border: oklch(0.54 0.008 75);
 
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
   --safe-b: env(safe-area-inset-bottom, 0px);
@@ -84,12 +95,18 @@
   --danger: oklch(0.5 0.19 25);
   --warning: oklch(0.53 0.13 72);
 
+  --raised-2: oklch(0.885 0.013 85);
   --accent-soft: color-mix(in oklab, var(--a-fill) 13%, var(--bg));
+  --accent-glow: color-mix(in oklab, var(--a-fill) 30%, transparent);
   --glass-bg: color-mix(in oklab, var(--bg-2) 80%, transparent);
   --glass-line: color-mix(in oklab, var(--text) 14%, transparent);
+  --dock-glass: oklch(0.99 0.004 85 / 0.9);
+  --dock-liquid: oklch(0.99 0.004 85 / 0.6);
+  --dock-tab-on: oklch(0.235 0.014 65 / 0.08);
+  --toast-bg: oklch(0.26 0.012 65);
   --scrim: color-mix(in oklab, oklch(0.28 0.01 65) 42%, transparent);
-  --shadow: 0 20px 56px color-mix(in oklab, oklch(0.3 0.02 65) 20%, transparent);
-  --shadow-soft: 0 8px 24px color-mix(in oklab, oklch(0.3 0.02 65) 13%, transparent);
+  --shadow: 0 -16px 50px -20px color-mix(in oklab, oklch(0.3 0.02 65) 35%, transparent);
+  --shadow-soft: 0 12px 34px -12px color-mix(in oklab, oklch(0.3 0.02 65) 30%, transparent);
   --control-border: oklch(0.6 0.012 65);
 
   color-scheme: light;
@@ -162,9 +179,12 @@ body {
   color: var(--text);
   font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
   font-size: 15px;
-  line-height: 1.5;
+  line-height: 1.45;
+  font-feature-settings: "cv11", "ss03";
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overscroll-behavior-y: none;
 }
 
 button,
@@ -421,16 +441,17 @@ svg {
 
 .display h1 {
   font-size: 34px;
-  font-weight: 700;
+  font-weight: 680;
   line-height: 1.06;
-  letter-spacing: -0.036em;
+  letter-spacing: -0.04em;
+  font-variation-settings: "opsz" 32;
 }
 
 .display .sub {
   margin-top: 8px;
   color: var(--text-2);
-  font-size: 14.5px;
-  font-weight: 500;
+  font-size: 16px;
+  font-weight: 450;
 }
 
 .display .sub b {
@@ -439,12 +460,11 @@ svg {
 }
 
 .section-cap {
-  margin: 30px 0 8px;
-  color: var(--text-3);
-  font-size: 11.5px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  margin: 28px 0 6px;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 640;
+  letter-spacing: -0.01em;
 }
 
 .section-heading {
@@ -468,12 +488,11 @@ svg {
 }
 
 .day {
-  margin: 24px 0 0;
-  color: var(--text-3);
-  font-size: 11.5px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  margin: 26px 0 2px;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 640;
+  letter-spacing: -0.01em;
 }
 
 /* ---------- hairline rows ---------- */
@@ -489,11 +508,12 @@ svg {
 }
 
 .row {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 13px;
+  gap: 14px;
   width: 100%;
-  min-height: 62px;
+  min-height: 64px;
   padding: 11px 0;
   color: inherit;
   text-align: left;
@@ -520,9 +540,9 @@ a.row:hover {
 .row .ttl {
   display: block;
   overflow: hidden;
-  font-size: 15.5px;
-  font-weight: 620;
-  letter-spacing: -0.014em;
+  font-size: 16px;
+  font-weight: 580;
+  letter-spacing: -0.012em;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -530,9 +550,9 @@ a.row:hover {
 .row .cap {
   display: block;
   margin-top: 2px;
-  color: var(--text-2);
-  font-size: 13px;
-  font-weight: 500;
+  color: var(--text-3);
+  font-size: 13.5px;
+  font-weight: 450;
 }
 
 .row .end {
@@ -543,15 +563,15 @@ a.row:hover {
 
 .row .amt {
   display: block;
-  font-size: 15.5px;
-  font-weight: 700;
-  letter-spacing: -0.016em;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
 }
 
 .row .end .cap {
   margin-top: 2px;
-  font-size: 12.5px;
-  font-weight: 550;
+  font-size: 13px;
+  font-weight: 500;
 }
 
 .row .chev,
@@ -567,15 +587,16 @@ a.row:hover {
   height: 18px;
 }
 
+/* Dueline's glyph tile: every row leads with one. */
 .tile {
   display: grid;
   flex-shrink: 0;
   place-items: center;
   width: 42px;
   height: 42px;
-  border-radius: 13px;
+  border-radius: 14px;
   background: var(--raised);
-  font-size: 19px;
+  font-size: 20px;
   line-height: 1;
 }
 
@@ -587,45 +608,76 @@ a.row:hover {
 
 /* ---------- home ---------- */
 
-.group-row .tile {
-  width: 46px;
-  height: 46px;
-  border-radius: 15px;
-  font-size: 21px;
+.list .group-row + .group-row {
+  border-top: 0;
+}
+
+.list .group-row + .group-row::before,
+.ex-list .ex-row + .ex-row::before,
+.owe-row + .owe-row::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 56px;
+  height: 1px;
+  background: var(--line);
 }
 
 .balance-label {
   display: block;
-  color: var(--text-2);
-  font-size: 12.5px;
-  font-weight: 550;
+  color: var(--text-3);
+  font-size: 13px;
+  font-weight: 500;
 }
 
 /* ---------- big money block ---------- */
 
 .money-block {
-  margin-top: 24px;
+  margin-top: 26px;
 }
 
 .money-block .lbl {
   color: var(--text-2);
-  font-size: 13px;
-  font-weight: 550;
+  font-size: 15px;
+  font-weight: 560;
+}
+
+.money-block .lbl.pos {
+  color: var(--pos);
 }
 
 .money-block .val {
-  margin-top: 2px;
-  font-size: 43px;
-  font-weight: 700;
-  letter-spacing: -0.042em;
-  line-height: 1.02;
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  margin-top: 6px;
+  color: var(--text);
+  font-size: clamp(48px, 14vw, 64px);
+  font-weight: 660;
+  letter-spacing: -0.045em;
+  line-height: 0.95;
+  font-variation-settings: "opsz" 32;
+}
+
+.money-block .val .rupee {
+  margin-top: 0.14em;
+  color: var(--text-3);
+  font-size: 0.5em;
+  font-weight: 520;
+  letter-spacing: 0;
+}
+
+.money-block .val.clear {
+  color: var(--text-2);
+  font-size: clamp(38px, 11vw, 48px);
 }
 
 .money-block .note {
-  margin-top: 7px;
+  margin-top: 10px;
   color: var(--text-2);
-  font-size: 13px;
-  font-weight: 500;
+  font-size: 15px;
+  font-weight: 450;
 }
 
 /* ---------- group screen ---------- */
@@ -639,18 +691,18 @@ a.row:hover {
 .group-emoji {
   display: grid;
   place-items: center;
-  width: 48px;
-  height: 48px;
-  border-radius: 15px;
+  width: 56px;
+  height: 56px;
+  border-radius: 18px;
   background: var(--raised);
-  font-size: 24px;
+  font-size: 27px;
   line-height: 1;
 }
 
 .group-title-line h1 {
-  font-size: 27px;
-  font-weight: 700;
-  letter-spacing: -0.034em;
+  font-size: 30px;
+  font-weight: 680;
+  letter-spacing: -0.035em;
   line-height: 1.1;
 }
 
@@ -658,16 +710,16 @@ a.row:hover {
   display: flex;
   align-items: center;
   gap: 9px;
-  margin-top: 10px;
-  color: var(--text-2);
-  font-size: 13.5px;
+  margin-top: 12px;
+  color: var(--text-3);
+  font-size: 14px;
   font-weight: 500;
 }
 
 .act-row {
   display: flex;
   gap: 10px;
-  margin-top: 18px;
+  margin-top: 22px;
 }
 
 .act-row .btn {
@@ -682,50 +734,50 @@ a.row:hover {
 }
 
 .owe-row {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 12px;
-  width: 100%;
-  min-height: 56px;
-  padding: 10px 0;
-  text-align: left;
-}
-
-.owe-row + .owe-row {
-  border-top: 1px solid var(--line);
-}
-
-.owe-row .who {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  font-size: 14.5px;
-  font-weight: 550;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.owe-row .amt {
-  flex-shrink: 0;
-  font-size: 15px;
-  font-weight: 700;
-  letter-spacing: -0.016em;
-}
-
-/* ---------- expense rows ---------- */
-
-.ex-row {
-  display: flex;
-  align-items: center;
-  gap: 13px;
+  gap: 14px;
   width: 100%;
   min-height: 64px;
   padding: 11px 0;
   text-align: left;
 }
 
-.ex-list .ex-row + .ex-row {
-  border-top: 1px solid var(--line);
+.owe-row .avatar {
+  width: 42px;
+  height: 42px;
+}
+
+.owe-row .who {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 16px;
+  font-weight: 580;
+  letter-spacing: -0.012em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.owe-row .amt {
+  flex-shrink: 0;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+
+/* ---------- expense rows ---------- */
+
+.ex-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  min-height: 70px;
+  padding: 11px 0;
+  text-align: left;
 }
 
 button.ex-row:hover {
@@ -738,8 +790,10 @@ button.ex-row:hover {
   display: grid;
   flex-shrink: 0;
   place-items: center;
-  width: 30px;
-  height: 30px;
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
+  background: var(--raised);
   font-size: 20px;
   line-height: 1;
 }
@@ -752,9 +806,9 @@ button.ex-row:hover {
 .ex-row .m b {
   display: block;
   overflow: hidden;
-  font-size: 15.5px;
-  font-weight: 620;
-  letter-spacing: -0.016em;
+  font-size: 16px;
+  font-weight: 580;
+  letter-spacing: -0.012em;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -765,9 +819,9 @@ button.ex-row:hover {
   gap: 7px;
   margin-top: 2px;
   overflow: hidden;
-  color: var(--text-2);
-  font-size: 12.8px;
-  font-weight: 500;
+  color: var(--text-3);
+  font-size: 13.5px;
+  font-weight: 450;
   white-space: nowrap;
 }
 
@@ -779,17 +833,17 @@ button.ex-row:hover {
 
 .ex-row .e b {
   display: block;
-  font-size: 15.5px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
 }
 
 .ex-row .e span {
   display: block;
   margin-top: 2px;
-  color: var(--text-2);
-  font-size: 12.3px;
-  font-weight: 550;
+  color: var(--text-3);
+  font-size: 13px;
+  font-weight: 500;
 }
 
 .proof-dot {
@@ -884,24 +938,26 @@ button.ex-row:hover {
   align-items: center;
   gap: 7px;
   min-height: 44px;
-  padding: 0 14px;
+  padding: 0 15px;
   border: 1px solid var(--line-2);
-  border-radius: 14px;
-  background: transparent;
-  color: var(--text);
-  font-size: 14px;
-  font-weight: 580;
+  border-radius: 999px;
+  background: var(--bg-2);
+  color: var(--text-2);
+  font-size: 14.5px;
+  font-weight: 540;
+  white-space: nowrap;
 }
 
 .chip:hover {
   border-color: var(--control-border);
+  color: var(--text);
 }
 
 .chip.on {
-  border-color: var(--accent);
+  border-color: color-mix(in oklab, var(--accent) 55%, transparent);
   background: var(--accent-soft);
   color: var(--accent-text);
-  font-weight: 650;
+  font-weight: 620;
 }
 
 .member-tag {
@@ -913,7 +969,7 @@ button.ex-row:hover {
   place-items: center;
   width: 30px;
   height: 30px;
-  border-radius: 9px;
+  border-radius: 999px;
   color: var(--text-2);
 }
 
@@ -944,10 +1000,11 @@ button.ex-row:hover {
   width: 100%;
   min-height: 52px;
   padding: 0 20px;
-  border-radius: 15px;
-  font-size: 15.5px;
-  font-weight: 650;
-  letter-spacing: -0.012em;
+  border-radius: 999px;
+  font-size: 16px;
+  font-weight: 640;
+  letter-spacing: -0.01em;
+  user-select: none;
 }
 
 .btn svg {
@@ -958,6 +1015,7 @@ button.ex-row:hover {
 .btn.primary {
   background: var(--accent);
   color: var(--accent-ink);
+  box-shadow: 0 10px 30px -12px var(--accent-glow);
 }
 
 .btn.primary:hover {
@@ -974,7 +1032,7 @@ button.ex-row:hover {
 }
 
 .btn.ghost {
-  box-shadow: inset 0 0 0 1.5px var(--line-2);
+  box-shadow: inset 0 0 0 1px var(--line-2);
   color: var(--text);
 }
 
@@ -991,6 +1049,22 @@ button.ex-row:hover {
   color: var(--text);
 }
 
+/* Sign-in: Google is the one bright white pill, everything else stays quiet. */
+.btn.google {
+  background: oklch(0.99 0 0);
+  color: oklch(0.2 0 0);
+  font-weight: 620;
+  box-shadow: 0 12px 34px -14px oklch(1 0 0 / 0.28);
+}
+
+.btn.google:hover {
+  background: oklch(0.95 0 0);
+}
+
+:root[data-theme="light"] .btn.google {
+  box-shadow: inset 0 0 0 1px var(--line-2), 0 10px 26px -14px oklch(0.3 0.02 65 / 0.35);
+}
+
 .btn.danger {
   color: var(--danger);
 }
@@ -1003,8 +1077,8 @@ button.ex-row:hover {
   width: auto;
   min-height: 44px;
   padding: 0 16px;
-  border-radius: 13px;
-  font-size: 14px;
+  border-radius: 999px;
+  font-size: 14.5px;
 }
 
 .btn[disabled] {
@@ -1037,11 +1111,12 @@ button.ex-row:hover {
 
 .seg {
   display: flex;
-  gap: 5px;
+  gap: 4px;
   overflow-x: auto;
   padding: 4px;
-  border-radius: 15px;
-  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--bg-2);
   scrollbar-width: none;
 }
 
@@ -1054,11 +1129,12 @@ button.ex-row:hover {
   min-width: fit-content;
   min-height: 44px;
   padding: 0 14px;
-  border-radius: 11px;
-  color: var(--text-2);
-  font-size: 14px;
-  font-weight: 580;
+  border-radius: 10px;
+  color: var(--text-3);
+  font-size: 14.5px;
+  font-weight: 560;
   white-space: nowrap;
+  transition: background 0.2s var(--ease), color 0.2s var(--ease);
 }
 
 .seg button:hover {
@@ -1066,9 +1142,15 @@ button.ex-row:hover {
 }
 
 .seg button.on {
-  background: var(--bg);
+  background: var(--raised-2);
   color: var(--text);
-  font-weight: 650;
+  font-weight: 600;
+  box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.06), 0 4px 14px -6px oklch(0 0 0 / 0.6);
+}
+
+:root[data-theme="light"] .seg button.on {
+  background: var(--bg-2);
+  box-shadow: 0 1px 2px oklch(0.3 0.02 65 / 0.12), 0 4px 12px -6px oklch(0.3 0.02 65 / 0.25);
 }
 
 /* ---------- accent swatches ---------- */
@@ -1151,20 +1233,20 @@ button.ex-row:hover {
   display: block;
   margin: 22px 0 8px;
   color: var(--text-2);
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 14px;
+  font-weight: 560;
 }
 
 .in {
   width: 100%;
-  min-height: 54px;
+  min-height: 52px;
   padding: 0 16px;
-  border: 1.5px solid var(--control-border);
-  border-radius: 15px;
-  background: var(--bg-2);
+  border: 1px solid var(--control-border);
+  border-radius: 16px;
+  background: var(--raised);
   color: var(--text);
   font-size: 16px;
-  font-weight: 520;
+  font-weight: 500;
 }
 
 .in:hover {
@@ -1174,6 +1256,7 @@ button.ex-row:hover {
 .in:focus {
   border-color: var(--accent);
   outline: none;
+  background: var(--raised-2);
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
@@ -1204,8 +1287,18 @@ button.ex-row:hover {
   gap: 2px;
   padding: 10px 0 2px;
   font-size: 46px;
-  font-weight: 700;
-  letter-spacing: -0.042em;
+  font-weight: 660;
+  letter-spacing: -0.045em;
+}
+
+/* The rupee sign small and muted beside the digits, as in Dueline. */
+.amount-shell > span {
+  align-self: flex-start;
+  margin: 0.2em 2px 0 0;
+  color: var(--text-3);
+  font-size: 0.5em;
+  font-weight: 520;
+  letter-spacing: 0;
 }
 
 .amount-in {
@@ -1215,8 +1308,8 @@ button.ex-row:hover {
   background: none;
   color: var(--text);
   font-size: 46px;
-  font-weight: 700;
-  letter-spacing: -0.042em;
+  font-weight: 660;
+  letter-spacing: -0.045em;
   outline: none;
 }
 
@@ -1269,10 +1362,10 @@ button.ex-row:hover {
 .summary-icon {
   display: grid;
   place-items: center;
-  width: 38px;
-  height: 38px;
+  width: 42px;
+  height: 42px;
   flex-shrink: 0;
-  border-radius: 12px;
+  border-radius: 14px;
   background: var(--raised);
   color: var(--text-2);
 }
@@ -1364,17 +1457,19 @@ button.ex-row:hover {
   border: 1px solid var(--glass-line);
 }
 
+/* Dueline's dock: a compact glass pill of icon tabs where the current one
+   opens into icon + label, and one solid action beside it. js/glass.js
+   upgrades the frosted pill to real refraction on Chromium. */
 #dock {
   position: fixed;
   bottom: calc(var(--safe-b) + 14px);
   left: 50%;
   z-index: 45;
   display: flex;
-  gap: 2px;
-  width: min(430px, calc(100% - 32px));
-  padding: 6px;
-  border-radius: 24px;
-  box-shadow: var(--shadow-soft);
+  align-items: center;
+  gap: 10px;
+  width: max-content;
+  max-width: calc(100vw - 16px);
   transform: translateX(-50%);
   transition: transform 0.26s var(--ease), opacity 0.2s var(--ease);
 }
@@ -1385,32 +1480,97 @@ button.ex-row:hover {
   transform: translate(-50%, 140%);
 }
 
-#dock a {
+.dock-glass {
   display: flex;
-  flex: 1;
-  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 3px;
-  min-height: 56px;
-  border-radius: 18px;
+  gap: 2px;
+  height: 60px;
+  padding: 0 6px;
+  border: 1px solid var(--glass-line);
+  border-radius: 999px;
+  background: var(--dock-glass);
+  backdrop-filter: blur(26px) saturate(170%);
+  -webkit-backdrop-filter: blur(26px) saturate(170%);
+  box-shadow: var(--shadow-soft), 0 0 0 1px oklch(1 0 0 / 0.03);
+}
+
+.dock-glass[data-glass="liquid"] {
+  background: var(--dock-liquid);
+  box-shadow:
+    inset 0 1px 0 oklch(1 0 0 / 0.1),
+    inset 0 -1px 0 oklch(1 0 0 / 0.04),
+    inset 0 0 22px color-mix(in oklab, var(--accent) 7%, transparent),
+    var(--shadow-soft);
+}
+
+#dock a {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 48px;
+  min-width: 48px;
+  padding: 0 14px;
+  border-radius: 999px;
   color: var(--text-3);
-  font-size: 10.5px;
-  font-weight: 620;
+  transition: background 0.22s var(--ease), color 0.2s var(--ease);
 }
 
 #dock a svg {
-  width: 22px;
-  height: 22px;
+  width: 21px;
+  height: 21px;
 }
 
 #dock a:hover {
-  color: var(--text-2);
+  color: var(--text);
 }
 
 #dock a.on {
-  background: var(--accent-soft);
-  color: var(--accent-text);
+  background: var(--dock-tab-on);
+  color: var(--text);
+}
+
+#dock a .label {
+  overflow: hidden;
+  max-width: 0;
+  margin-left: 0;
+  opacity: 0;
+  font-size: 13.5px;
+  font-weight: 620;
+  white-space: nowrap;
+  transition: max-width 0.24s var(--ease) 0.04s, margin-left 0.24s var(--ease) 0.04s, opacity 0.16s ease 0.06s;
+}
+
+#dock a.on .label {
+  max-width: 80px;
+  margin-left: 8px;
+  opacity: 1;
+}
+
+.dock-add {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 60px;
+  height: 60px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  box-shadow: 0 12px 30px -8px var(--accent-glow), inset 0 1px 0 oklch(1 0 0 / 0.35);
+  transition: transform 0.2s var(--ease), background 0.2s var(--ease);
+}
+
+.dock-add svg {
+  width: 26px;
+  height: 26px;
+  stroke-width: 2.4;
+}
+
+.dock-add:hover {
+  background: color-mix(in oklab, var(--accent) 88%, var(--text));
+}
+
+.dock-add:active {
+  transform: scale(0.93);
 }
 
 /* ---------- sheets ---------- */
@@ -1436,12 +1596,14 @@ button.ex-row:hover {
   display: flex;
   flex-direction: column;
   width: min(560px, 100%);
-  max-height: calc(100dvh - 12px);
-  padding: 0 var(--gutter) calc(var(--safe-b) + 18px);
-  border-radius: 26px 26px 0 0;
-  background: var(--bg);
+  max-height: calc(100dvh - var(--safe-t) - 18px);
+  padding: 0 22px calc(var(--safe-b) + 18px);
+  border: 1px solid var(--line);
+  border-bottom: 0;
+  border-radius: 28px 28px 0 0;
+  background: var(--bg-2);
   box-shadow: var(--shadow);
-  animation: sheet-up 0.28s var(--ease);
+  animation: sheet-up 0.42s var(--ease);
 }
 
 .sheet:focus {
@@ -1458,11 +1620,11 @@ button.ex-row:hover {
 
 .grab {
   width: 38px;
-  height: 4px;
+  height: 5px;
   flex-shrink: 0;
   margin: 10px auto 2px;
-  border-radius: 3px;
-  background: var(--line-2);
+  border-radius: 99px;
+  background: var(--raised-2);
 }
 
 .shead {
@@ -1477,9 +1639,9 @@ button.ex-row:hover {
 .shead h2 {
   min-width: 0;
   overflow: hidden;
-  font-size: 20px;
-  font-weight: 680;
-  letter-spacing: -0.026em;
+  font-size: 19px;
+  font-weight: 660;
+  letter-spacing: -0.02em;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1524,16 +1686,18 @@ button.ex-row:hover {
 }
 
 .empty h3 {
-  font-size: 19px;
-  font-weight: 680;
-  letter-spacing: -0.024em;
+  text-wrap: balance;
+  font-size: 22px;
+  font-weight: 660;
+  letter-spacing: -0.03em;
+  line-height: 1.2;
 }
 
 .empty p {
-  max-width: 42ch;
+  max-width: 40ch;
   margin: 8px auto 0;
   color: var(--text-2);
-  font-size: 14.5px;
+  font-size: 15.5px;
 }
 
 .empty .btn {
@@ -1575,16 +1739,20 @@ button.ex-row:hover {
 }
 
 .welcome-hero h2 {
-  font-size: 30px;
-  font-weight: 700;
-  letter-spacing: -0.038em;
-  line-height: 1.1;
+  text-wrap: balance;
+  font-size: 34px;
+  font-weight: 680;
+  letter-spacing: -0.045em;
+  line-height: 1.04;
+  font-variation-settings: "opsz" 32;
 }
 
 .welcome-hero p {
-  margin-top: 10px;
+  max-width: 34ch;
+  margin-top: 12px;
   color: var(--text-2);
-  font-size: 15px;
+  font-size: 16px;
+  line-height: 1.5;
 }
 
 .trust-points {
@@ -2030,20 +2198,22 @@ button.ex-row:hover {
 
 /* ---------- toast ---------- */
 
+/* Dueline's toast: a dark slab with a hairline, text in ink. */
 #toast {
   position: fixed;
-  bottom: calc(var(--safe-b) + var(--dock-h) + 16px);
+  bottom: calc(var(--safe-b) + var(--dock-h) + 8px);
   left: 50%;
   z-index: 70;
-  max-width: min(420px, calc(100% - 40px));
-  padding: 13px 20px;
-  border-radius: 15px;
-  background: var(--text);
-  color: var(--bg);
-  font-size: 14px;
-  font-weight: 600;
+  max-width: min(520px, calc(100% - 32px));
+  padding: 14px 18px;
+  border: 1px solid oklch(1 0 0 / 0.12);
+  border-radius: 16px;
+  background: var(--toast-bg);
+  color: oklch(0.965 0.006 85);
+  font-size: 14.5px;
+  font-weight: 540;
   text-align: center;
-  box-shadow: var(--shadow-soft);
+  box-shadow: 0 18px 40px -12px oklch(0 0 0 / 0.8);
   opacity: 0;
   pointer-events: none;
   transform: translate(-50%, 12px);

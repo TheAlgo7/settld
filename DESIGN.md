@@ -2,6 +2,8 @@
 
 ## Design intent
 
+Since 0.5 (September 2026) Settld shares Dueline's design family: the same warm near-black surfaces, Inter type scale, rows led by 42px glyph tiles, pill buttons, bottom sheets, dark toasts, and a liquid-glass dock with one solid action beside it. Settld keeps its own mark, its coral default and the accent choices, and its light theme.
+
 Settld is a calm, proof-first ledger for trips and small groups. It should feel precise enough to trust with money and relaxed enough to use at a crowded dinner table. The visual identity comes from the coral Settld loop/check mark, warm paper text, restrained surfaces, and traceable records. Decoration never competes with the amount, payer, proof, or current settlement state.
 
 Physical scene: a friend adds a restaurant bill one-handed at 10pm, then another member checks the receipt outdoors the next morning. Dark is the signature theme, but light mode is a complete high-ambient-light theme.
@@ -16,12 +18,14 @@ Because the accent can become green, meaning never rests on it. `--pos` stays a 
 
 ### Dark theme
 
-- `--void`: `oklch(0.13 0.008 260)` (`#090A0B` reference)
-- `--graphite`: `oklch(0.19 0.009 250)` (`#141618` reference)
-- `--raised`: `oklch(0.23 0.010 250)`
-- `--line`: `oklch(0.31 0.012 250)`
-- `--paper`: `oklch(0.96 0.014 82)` (`#F4F1E8` reference)
-- `--slate`: `oklch(0.66 0.015 250)` (`#8E9298` reference)
+Surfaces and text follow Dueline, warm by a hair (hue 70 to 85), not the cool blue-greys of 0.4:
+
+- `--bg` (page): `oklch(0.135 0.003 70)`
+- `--bg-2` (sheets): `oklch(0.172 0.004 70)`
+- `--raised` (fields, tiles): `oklch(0.205 0.005 70)`; `--raised-2` (pressed, selected): `oklch(0.25 0.006 70)`
+- `--line`: `oklch(0.215 0.004 70)`
+- `--text`: `oklch(0.965 0.006 85)`; `--text-2`: `oklch(0.76 0.009 80)`; `--text-3` (meta, the lowest readable level): `oklch(0.62 0.01 78)`
+- `--pos`: `oklch(0.8 0.13 156)`, Dueline's calmer green
 - `--coral`: `oklch(0.72 0.19 31)` (`#FF6F61` reference)
 - `--success`: `oklch(0.78 0.16 151)` (`#55D98B` reference)
 - `--danger`: `#FF6659` for AA text contrast on dark surfaces (`#E74C3C` brand reference)
@@ -48,7 +52,8 @@ Filled coral, success, danger, and warning controls use dark ink. Warm paper tex
 - Row title: 16px / 650 / 1.3.
 - Body: 15px / 450 / 1.5.
 - Operational caption: 13px minimum / 550 / 1.4. Essential financial labels use 14px minimum.
-- Hero amount: 40px / 700 / 1 / -0.035em.
+- Hero amount: 48 to 64px / 660 / 0.95 / -0.045em, with the rupee sign at half size in `--text-3`. The number is ink; the label above it carries the meaning (`You get back` in green, `You owe` in ink).
+- Section and day headings: 15px / 640, sentence case. No uppercase letter-spaced captions.
 - All money and numeric tables use tabular numerals.
 - The 64px marketing display size from the identity board is not used inside task UI.
 
@@ -65,7 +70,7 @@ Filled coral, success, danger, and warning controls use dark ink. Warm paper tex
 
 ## Elevation and glass
 
-Records sit directly on the page surface, separated by hairlines, not stacked in cards. A card is only correct when something genuinely needs lifting off the page, and cards are never nested. Shadows are soft and low-chroma. The floating dock and the compact collapsed app bar are the only translucent surfaces. Sheets, inputs, and menus are opaque.
+Records sit directly on the page surface, separated by hairlines that start after the row's tile, not stacked in cards. A card is only correct when something genuinely needs lifting off the page, and cards are never nested. Shadows are soft and low-chroma. The dock (a pill of icon tabs where the current one opens into icon and label) and the compact collapsed app bar are the only translucent surfaces; on Chromium the dock refracts like thick glass (`js/glass.js`, an SVG displacement map, the same as Dueline). Sheets, inputs, and menus are opaque.
 
 ## Brand mark
 
@@ -77,7 +82,8 @@ The mark is a flat coral loop that reads as an abstract `S`, with a coral check 
 
 - Global destinations: Groups, Friends, Activity, You.
 - A group is a single scrolling screen, never tabs: identity, your position, the settle plan as `X owes you` rows, then the expense list by day. Everything else (people, invite, trip summary, history, settings) hangs off one group menu.
-- `Settle up` and `Add expense` sit together directly under the balance. There is no floating action button.
+- On a group, `Settle up` and `Add expense` sit together directly under the balance and the dock steps aside.
+- Everywhere else the dock carries one solid `+` (Add expense): it starts a group when there is none, adds straight into the only group, or asks which group.
 - Large in-flow title collapses to a compact app bar after scrolling.
 
 ### Grouped records
@@ -89,7 +95,9 @@ The mark is a flat coral loop that reads as an abstract `S`, with a coral check 
 
 ### Buttons and controls
 
-- Primary: coral fill, void ink.
+- Every button is a pill (radius 999px), 52px high.
+- Primary: accent fill, dark ink, a soft accent glow.
+- Google sign-in: the one bright white pill; other ways in stay quiet.
 - Secondary: raised neutral surface, paper text.
 - Quiet: transparent, paper or slate text.
 - Danger: danger text, transparent fill until final confirmation.
