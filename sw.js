@@ -1,7 +1,7 @@
 // Settld service worker: precache the shell, stale-while-revalidate for
 // same-origin requests. Bump VERSION on every deploy.
 
-const VERSION = "settld-v0.5.2";
+const VERSION = "settld-v0.5.3";
 const ASSETS = [
   "./",
   "./index.html",
