@@ -39,5 +39,11 @@
         }
       ]
     }
+  ],
+  "rewrites": [
+    {
+      "source": "/.well-known/:file*",
+      "destination": "/well-known/:file*"
+    }
   ]
 }
