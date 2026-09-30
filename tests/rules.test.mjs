@@ -246,5 +246,63 @@ await t("a profile carrying the new accent and phone fields is accepted", async 
   }));
 });
 
+await t("repeating and foreign-currency expenses are accepted in a shared group", async () => {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), "groups", GID), groupDoc({ memberUids: [OWNER, MEMBER] }));
+  });
+  await assertSucceeds(setDoc(doc(member, "groups", GID, "expenses", "e1"), expenseDoc({
+    repeat: { freq: "monthly", day: 31 },
+    seriesId: "e1",
+    fx: { currency: "USD", amount: 45.5, rate: 83.42 },
+  })));
+  await assertSucceeds(setDoc(doc(member, "groups", GID, "expenses", "e2"), expenseDoc({ id: "e2", repeat: null, seriesId: "e1", fx: null })));
+  await assertSucceeds(setDoc(doc(member, "groups", GID, "expenses", "e3"), expenseDoc({
+    id: "e3",
+    split: {
+      mode: "items",
+      participants: [{ memberId: "m1" }],
+      items: [{ name: "Paneer", amountP: 100000, memberIds: ["m1"] }],
+    },
+  })));
+  await assertFails(setDoc(doc(member, "groups", GID, "expenses", "e4"), expenseDoc({ id: "e4", repeat: { freq: "hourly" } })));
+  await assertFails(setDoc(doc(member, "groups", GID, "expenses", "e5"), expenseDoc({ id: "e5", repeat: { freq: "monthly", day: 32 } })));
+  await assertFails(setDoc(doc(member, "groups", GID, "expenses", "e6"), expenseDoc({ id: "e6", fx: { currency: "DOLLARS", amount: 1, rate: 80 } })));
+  await assertFails(setDoc(doc(member, "groups", GID, "expenses", "e7"), expenseDoc({ id: "e7", fx: { currency: "USD", amount: 1, rate: 0 } })));
+  await assertFails(setDoc(doc(outsider, "groups", GID, "expenses", "e8"), expenseDoc({ id: "e8", repeat: { freq: "weekly" } })));
+});
+
+await t("a group can carry the split new expenses start from", async () => {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), "groups", GID), groupDoc({ memberUids: [OWNER, MEMBER] }));
+  });
+  const split = { mode: "percent", participants: [{ memberId: "m1", value: 60 }, { memberId: "m2", value: 40 }] };
+  await assertSucceeds(setDoc(doc(member, "groups", GID), groupDoc({ memberUids: [OWNER, MEMBER], defaultSplit: split, updatedAt: 2 })));
+  await assertSucceeds(setDoc(doc(member, "groups", GID), groupDoc({ memberUids: [OWNER, MEMBER], defaultSplit: null, updatedAt: 3 })));
+  await assertFails(setDoc(doc(member, "groups", GID), groupDoc({ memberUids: [OWNER, MEMBER], defaultSplit: { mode: "items", participants: [] }, updatedAt: 4 })));
+  await assertSucceeds(setDoc(doc(owner, "users", OWNER, "groups", "solo"), {
+    id: "solo", name: "Flat", emoji: "home", currency: "INR", defaultSplit: split, members: [], createdAt: 1, updatedAt: 1,
+  }));
+});
+
+await t("the personal backup takes the new expense fields and still rejects strays", async () => {
+  await assertSucceeds(setDoc(doc(owner, "users", OWNER, "expenses", "e1"), expenseDoc({
+    repeat: { freq: "weekly" },
+    seriesId: "e1",
+    fx: { currency: "THB", amount: 1200, rate: 2.47 },
+  })));
+  await assertFails(setDoc(doc(owner, "users", OWNER, "expenses", "e2"), expenseDoc({ id: "e2", stray: true })));
+});
+
+await t("comments are history entries only members can add, and nobody can edit", async () => {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), "groups", GID), groupDoc({ memberUids: [OWNER, MEMBER] }));
+  });
+  const comment = { id: "c1", groupId: GID, ts: 5, actor: "Aisha", type: "comment", summary: "Was the tip included?", data: { expenseId: "e1" } };
+  await assertSucceeds(setDoc(doc(member, "groups", GID, "events", "c1"), comment));
+  await assertFails(setDoc(doc(outsider, "groups", GID, "events", "c2"), { ...comment, id: "c2" }));
+  await assertFails(setDoc(doc(member, "groups", GID, "events", "c1"), { ...comment, summary: "edited" }));
+  await assertFails(deleteDoc(doc(member, "groups", GID, "events", "c1")));
+});
+
 await env.cleanup();
 console.log(`\n${passed} rules tests passed`);

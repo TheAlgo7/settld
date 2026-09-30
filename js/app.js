@@ -7,23 +7,16 @@ import * as cloud from "./cloud.js";
 import { fmt, toPaise, fromPaise, computeShares } from "./money.js";
 import { computeBalances, simplify, totalSpend, upiLink } from "./settle.js";
 import { liquidGlass } from "./glass.js";
+import { svg } from "./icons.js";
+import { CATS, catOf, catIcon, GROUP_ICONS, groupIcon, groupIconId, guessCategory } from "./catalog.js";
+import { FREQS, freqOf, makeRepeat, nextDate } from "./recurring.js";
+import { CURRENCIES, currencyName, currencySymbol, fmtForeign, rateFor, roundRate, spreadInr, toInrPaise } from "./fx.js";
+import { parseSplitwise, buildImport, nameFromFile } from "./splitwise.js";
 
 // A hero amount, set like Dueline's: the rupee sign small and muted, the digits large.
 const heroMoney = (paise) => `<span class="rupee">₹</span>${fmt(paise).replace(/^₹\s?/, "")}`;
 
 /* ---------- constants ---------- */
-
-const CATS = [
-  { id: "food", label: "Food", emoji: "🍜" },
-  { id: "travel", label: "Travel", emoji: "🚕" },
-  { id: "stay", label: "Stay", emoji: "🏨" },
-  { id: "tickets", label: "Tickets", emoji: "🎟️" },
-  { id: "groceries", label: "Groceries", emoji: "🛒" },
-  { id: "shopping", label: "Shopping", emoji: "🛍️" },
-  { id: "other", label: "Other", emoji: "🧾" },
-];
-const catOf = (id) => CATS.find((c) => c.id === id) ?? CATS[CATS.length - 1];
-const GROUP_EMOJIS = ["🏝️", "🏠", "🍕", "🎉", "✈️", "🎬", "🏔️", "💼"];
 
 // Swatch fills live in CSS so they track the theme; this list only names them.
 const ACCENTS = [
@@ -60,8 +53,18 @@ const I = {
   people: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.3"/><path d="M2.8 19.2c.45-3.5 2.6-5.2 6.2-5.2s5.75 1.7 6.2 5.2"/><path d="M16.2 5.1a3.1 3.1 0 0 1 0 5.8M18.4 19.2c-.2-2.1-.85-3.6-2.1-4.5"/></svg>',
   sliders: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/><circle cx="15" cy="7" r="2.4" fill="var(--bg)"/><circle cx="9" cy="12" r="2.4" fill="var(--bg)"/><circle cx="16" cy="17" r="2.4" fill="var(--bg)"/></svg>',
   history: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1M3.5 4.5V10h5.5"/><path d="M12 7.5V12l3 1.8"/></svg>',
+  search: svg("search"),
+  chat: svg("chat"),
+  repeat: svg("repeat"),
+  undo: svg("undo"),
+  globe: svg("globe"),
+  items: svg("items"),
+  upload: svg("upload"),
+  send: svg("send"),
+  bars: svg("bars"),
+  person: svg("person"),
 };
-const evIcon = { expense: "receipt", edit: "pen", delete: "trash", settle: "check", member: "plus", group: "plus" };
+const evIcon = { expense: "receipt", edit: "pen", delete: "trash", settle: "check", member: "plus", group: "plus", comment: "chat", restore: "undo" };
 
 const MARK = `<svg class="brand-mark" viewBox="0 0 512 512" aria-hidden="true">
   <g class="brand-glyph">
@@ -93,6 +96,11 @@ function dayLabel(ts) {
   if (dayKey(ts) === dayKey(now)) return "Today";
   if (dayKey(ts) === dayKey(now.getTime() - 86400000)) return "Yesterday";
   return new Date(ts).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" });
+}
+// For use inside a sentence: "today", "yesterday", "on Mon, 5 Oct".
+function dayPhrase(ts) {
+  const label = dayLabel(ts);
+  return label === "Today" || label === "Yesterday" ? label.toLowerCase() : `on ${label}`;
 }
 const timeLabel = (ts) => new Date(ts).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" });
 const toDateInput = (ts) => {
@@ -404,7 +412,7 @@ function quickAdd() {
   const body = el(`<div class="list"></div>`);
   for (const g of groups) {
     const row = el(`<button class="row group-row pressable">
-      <span class="tile">${esc(g.emoji ?? "🧾")}</span>
+      <span class="tile">${groupIcon(g)}</span>
       <span class="grow"><span class="ttl">${esc(g.name)}</span>
         <span class="cap">${g.members.length} people</span></span>
       <span class="chev">${I.chevR}</span>
@@ -463,6 +471,7 @@ function render() {
     else a.removeAttribute("aria-current");
   }
   scrollTo(0, keepScroll ? y : 0);
+  $("#appbar").classList.toggle("on", scrollY > 44);
 }
 
 addEventListener("hashchange", render);
@@ -525,8 +534,10 @@ function HomeScreen() {
       <p>Create one for a trip, a flat, or tonight's dinner. Every receipt and edit stays with the expense.</p>
       <button class="btn primary" id="e-new">${I.plus} Create a group</button>
       <button class="btn quiet" id="e-demo">Explore a sample trip</button>
+      <button class="btn quiet" id="e-import">${I.upload} Bring a group from Splitwise</button>
     </div>`);
     $("#e-new", empty).addEventListener("click", () => newGroupSheet());
+    $("#e-import", empty).addEventListener("click", () => importSheet());
     $("#e-demo", empty).addEventListener("click", async (e) => {
       e.currentTarget.disabled = true;
       const g = await store.seedDemo();
@@ -544,7 +555,7 @@ function HomeScreen() {
             ? `<span class="balance-label">You get</span><span class="amt money pos">${fmt(net)}</span>`
             : `<span class="balance-label">You owe</span><span class="amt money debt">${fmt(-net)}</span>`;
       const row = el(`<button class="row group-row pressable">
-        <span class="tile">${esc(g.emoji ?? "🧾")}</span>
+        <span class="tile">${groupIcon(g)}</span>
         <span class="grow"><span class="ttl">${esc(g.name)}</span>
           <span class="cap">${g.members.length} people · ${count} expense${count === 1 ? "" : "s"}</span></span>
         <span class="end">${endHtml}</span>
@@ -553,12 +564,19 @@ function HomeScreen() {
       list.append(row);
     }
     body.append(list);
-    const nb = el(`<button class="btn ghost" style="margin-top:22px">${I.plus} New group</button>`);
-    nb.addEventListener("click", () => newGroupSheet());
-    body.append(nb);
+    const actions = el(`<div class="home-actions">
+      <button class="btn ghost h-new">${I.plus} New group</button>
+      <button class="btn quiet h-import">${I.upload} Bring a group from Splitwise</button>
+    </div>`);
+    $(".h-new", actions).addEventListener("click", () => newGroupSheet());
+    $(".h-import", actions).addEventListener("click", () => importSheet());
+    body.append(actions);
   }
 
-  setAppbar({ title: "Groups" });
+  setAppbar({
+    title: "Groups",
+    right: rows.length ? iconBtn("search", "Search expenses", () => searchSheet()) : null,
+  });
   return view;
 }
 
@@ -579,7 +597,7 @@ function friendIndex() {
       // Their balance is the mirror of what they owe you inside this group.
       const theirs = bal.get(m.id) ?? 0;
       entry.net -= theirs;
-      entry.groups.push({ g, amount: -theirs });
+      entry.groups.push({ g, amount: -theirs, memberId: m.id });
       map.set(key, entry);
     }
   }
@@ -598,8 +616,11 @@ function FriendsScreen() {
   </div>`);
   const body = $(".friends-body", view);
 
+  const addOne = el(`<button class="btn ghost" style="margin-top:22px">${I.plus} Expense with one person</button>`);
+  addOne.addEventListener("click", () => oneToOneSheet());
   if (!friends.length) {
-    body.append(el(`<div class="empty"><h3>No one yet</h3><p>Add people to a group and their running balance with you appears here.</p></div>`));
+    body.append(el(`<div class="empty"><h3>No one yet</h3><p>Add people to a group, or split something with one person, and your running balance with them appears here.</p></div>`));
+    body.append(addOne);
   } else {
     if (owed || owing) {
       body.append(el(`<div class="summary-metrics" style="margin-top:20px">
@@ -625,10 +646,55 @@ function FriendsScreen() {
       list.append(row);
     }
     body.append(list);
+    body.append(addOne);
   }
 
   setAppbar({ title: "Friends" });
   return view;
+}
+
+// Splitting with one person, outside any group: pick or type their name and
+// the expense goes into your one-to-one ledger with them.
+function oneToOneSheet(prefill = "") {
+  const known = friendIndex().map((f) => f.name);
+  const body = el(`<div>
+    <label class="cap-label" for="oo-name" style="margin-top:4px">With whom?</label>
+    <input class="in" id="oo-name" placeholder="Their name" value="${esc(prefill)}" maxlength="${store.LIMITS.memberName}" autocomplete="off">
+    ${known.length ? `<div class="chips oo-known" style="margin-top:12px"></div>` : ""}
+    <div class="hint">Kept in its own ledger with them, apart from your groups, and counted in their balance here.</div>
+  </div>`);
+  const input = $("#oo-name", body);
+  const knownBox = $(".oo-known", body);
+  for (const name of known.slice(0, 12)) {
+    const chip = el(`<button class="chip">${avatarHtml({ name }, "sm")} ${esc(name)}</button>`);
+    chip.addEventListener("click", () => {
+      input.value = name;
+      go();
+    });
+    knownBox.append(chip);
+  }
+  const foot = el(`<button class="btn primary">Continue</button>`);
+  const go = async () => {
+    const name = input.value.trim();
+    if (!name) return toast("Whose expense is it?");
+    foot.disabled = true;
+    const g = await store.friendGroup(name);
+    closeSheet(false, () => expenseSheet(g));
+  };
+  foot.addEventListener("click", go);
+  input.addEventListener("keydown", (e) => e.key === "Enter" && go());
+  openSheet({ title: "Expense with one person", body, footer: foot });
+}
+
+// A WhatsApp message asking for what someone owes you, with your UPI ID so
+// they can pay without asking for it.
+function remindLink(name, amountP, where) {
+  const upi = store.state.profile?.upi;
+  const lines = [
+    `Hi ${name}, a quick reminder from Settld: you owe me ${fmt(amountP)}${where ? ` for ${where}` : ""}.`,
+    upi ? `My UPI ID is ${upi}.` : "",
+  ].filter(Boolean);
+  return `https://wa.me/?text=${encodeURIComponent(lines.join("\n"))}`;
 }
 
 function friendSheet(friend) {
@@ -649,14 +715,31 @@ function friendSheet(friend) {
           ? `<span class="balance-label">Owes you</span><span class="amt money pos">${fmt(amount)}</span>`
           : `<span class="balance-label">You owe</span><span class="amt money debt">${fmt(-amount)}</span>`;
     const row = el(`<button class="row pressable">
-      <span class="tile">${esc(g.emoji ?? "🧾")}</span>
+      <span class="tile">${groupIcon(g)}</span>
       <span class="grow"><span class="ttl">${esc(g.name)}</span></span>
       <span class="end">${endHtml}</span>
     </button>`);
     row.addEventListener("click", () => closeSheet(false, () => (location.hash = `#/group/${g.id}`)));
     list.append(row);
   }
-  openSheet({ title: friend.name, body });
+  const open = friend.groups.filter((x) => x.amount !== 0);
+  const where = open.length === 1 && open[0].g.emoji !== "person" ? open[0].g.name : "";
+  const foot = el(`<div class="btn-row">
+    ${friend.net > 0
+      ? `<a class="btn ghost" href="${remindLink(friend.name, friend.net, where)}" target="_blank" rel="noopener">${I.send} Remind</a>`
+      : friend.net < 0
+        ? `<button class="btn ghost f-settle">${I.settle} Settle up</button>`
+        : ""}
+    <button class="btn primary f-add">${I.plus} Add expense</button>
+  </div>`);
+  $(".f-add", foot).addEventListener("click", () => closeSheet(false, () => oneToOneSheet(friend.name)));
+  $(".f-settle", foot)?.addEventListener("click", () => {
+    // You owe them: settle group by group, starting with the largest.
+    const target = [...open].sort((a, b) => a.amount - b.amount)[0];
+    const you = store.youOf(target.g);
+    closeSheet(false, () => settleSheet(target.g, you.id, target.memberId, -target.amount));
+  });
+  openSheet({ title: friend.name, body, footer: foot });
 }
 
 /* ---------- activity ---------- */
@@ -677,7 +760,7 @@ function ActivityScreen() {
   return view;
 }
 
-function trailList(events, showGroup = false) {
+function trailList(events, showGroup = false, openable = true) {
   const box = el(`<div></div>`);
   let lastDay = "";
   let list = null;
@@ -689,12 +772,21 @@ function trailList(events, showGroup = false) {
       list = el(`<div class="list"></div>`);
       box.append(list);
     }
-    const gname = showGroup ? store.groupById(ev.groupId)?.name : null;
-    list.append(el(`<div class="trail-row">
+    const group = store.groupById(ev.groupId);
+    const gname = showGroup ? group?.name : null;
+    const expense = ev.data?.expenseId ? store.state.expenses.find((x) => x.id === ev.data.expenseId) : null;
+    const text =
+      ev.type === "comment"
+        ? `<b>${esc(ev.actor)}</b> on ${esc(expense?.desc ?? "an expense")}: “${esc(ev.summary)}”`
+        : esc(ev.summary);
+    const tag = expense && group && openable ? "button" : "div";
+    const row = el(`<${tag} class="trail-row${tag === "button" ? " pressable" : ""}">
       <span class="trail-dot ${ev.type}">${I[evIcon[ev.type] ?? "receipt"]}</span>
-      <span class="trail-txt">${esc(ev.summary)}
+      <span class="trail-txt">${text}
         <span class="cap">${gname ? esc(gname) + " · " : ""}${timeLabel(ev.ts)}</span></span>
-    </div>`));
+    </${tag}>`);
+    if (tag === "button") row.addEventListener("click", () => expenseDetailSheet(group, expense));
+    list.append(row);
   }
   return box;
 }
@@ -714,7 +806,7 @@ function GroupScreen(id) {
 
   const view = el(`<div>
     <div class="group-title-line">
-      <span class="group-emoji">${esc(g.emoji ?? "🧾")}</span>
+      <span class="group-emoji">${groupIcon(g)}</span>
       <h1>${esc(g.name)}</h1>
     </div>
     <div class="group-people">${avatarStackHtml(g.members)}<span>${esc(nameList(g.members))}</span></div>
@@ -782,12 +874,16 @@ function GroupScreen(id) {
   setAppbar({
     title: g.name,
     left: iconBtn("chevL", "Back to groups", () => (location.hash = "#/")),
-    right: iconBtn("more", "Group menu", () => groupMenuSheet(g)),
+    right: [
+      iconBtn("search", `Search ${g.name}`, () => searchSheet(g)),
+      iconBtn("more", "Group menu", () => groupMenuSheet(g)),
+    ],
   });
   return view;
 }
 
 function groupMenuSheet(g) {
+  const deleted = store.deletedOf(g.id);
   menuSheet(g.name, [
     { icon: "people", label: "People", cap: `${g.members.length} in this group`, run: () => membersSheet(g) },
     {
@@ -798,14 +894,50 @@ function groupMenuSheet(g) {
         : "Let others add expenses too",
       run: () => inviteSheet(g),
     },
-    { icon: "chart", label: "Trip summary", cap: "Spend by category", run: () => tripSummarySheet(g) },
-    { icon: "history", label: "History", cap: "Every add, edit and payment", run: () => historySheet(g) },
-    { icon: "sliders", label: "Group settings", cap: "Name, icon, delete", run: () => groupSettingsSheet(g) },
+    { icon: "chart", label: "Summary", cap: "Spend by category, over time and by person", run: () => summarySheet(g) },
+    { icon: "history", label: "History", cap: "Every add, edit, comment and payment", run: () => historySheet(g) },
+    deleted.length
+      ? { icon: "undo", label: "Deleted expenses", cap: `${deleted.length} you can bring back`, run: () => deletedSheet(g) }
+      : null,
+    { icon: "sliders", label: "Group settings", cap: "Name, icon, default split, delete", run: () => groupSettingsSheet(g) },
   ]);
+}
+
+function deletedSheet(g) {
+  const body = el(`<div>
+    <p class="hint" style="margin-top:4px">Deleting only hides an expense. Open one to bring it back; the history keeps both steps.</p>
+  </div>`);
+  const list = el(`<div class="list ex-list"></div>`);
+  // After a restore the list redraws, and closes once nothing is left in it.
+  const draw = () => {
+    const gone = store.deletedOf(g.id);
+    if (!gone.length) return closeSheet();
+    list.replaceChildren();
+    for (const e of gone) {
+      const row = el(`<button class="ex-row pressable">
+        <span class="ico">${catIcon(e.category)}</span>
+        <span class="m"><b>${esc(e.desc)}</b><span>Deleted ${dayPhrase(e.updatedAt ?? e.date)}</span></span>
+        <span class="e"><b class="money">${fmt(e.amountP)}</b></span>
+      </button>`);
+      row.addEventListener("click", () => expenseDetailSheet(g, e, { onRestore: draw }));
+      list.append(row);
+    }
+  };
+  body.append(list);
+  openSheet({ title: "Deleted expenses", body });
+  draw();
 }
 
 function expenseRows(g, exps, you) {
   const box = el(`<div></div>`);
+  const comments = new Map();
+  const editedIds = new Set();
+  for (const ev of store.eventsOf(g.id)) {
+    const id = ev.data?.expenseId;
+    if (!id) continue;
+    if (ev.type === "comment") comments.set(id, (comments.get(id) ?? 0) + 1);
+    else if (ev.type === "edit") editedIds.add(id);
+  }
   let lastDay = "";
   let list = null;
   for (const e of exps) {
@@ -828,11 +960,21 @@ function expenseRows(g, exps, you) {
         : mine > 0
           ? `<span class="pos money">you lent ${fmt(mine)}</span>`
           : `<span class="money">you owe ${fmt(-mine)}</span>`;
-    const edited = e.updatedAt - e.createdAt > 1500;
+    // Posting a repeat moves the schedule and touches updatedAt, so only an
+    // edit that made it into the history counts as "edited".
+    const edited = editedIds.has(e.id);
+    const said = comments.get(e.id) ?? 0;
+    const marks = [
+      e.fx ? `<span class="fx-note">${esc(fmtForeign(e.fx.amount, e.fx.currency))}</span>` : "",
+      e.repeat ? `<span class="proof-dot" title="Repeats ${freqOf(e.repeat.freq)?.label.toLowerCase() ?? ""}">${I.repeat}</span>` : "",
+      e.attachments?.length ? `<span class="proof-dot">${I.clip}${e.attachments.length}</span>` : "",
+      said ? `<span class="proof-dot">${I.chat}${said}</span>` : "",
+      edited ? `<span class="proof-dot">${I.pen}</span>` : "",
+    ].join("");
     const row = el(`<button class="ex-row pressable">
-      <span class="ico">${catOf(e.category).emoji}</span>
+      <span class="ico">${catIcon(e.category)}</span>
       <span class="m"><b>${esc(e.desc)}</b>
-        <span>${esc(payers)} paid${e.attachments?.length ? `<span class="proof-dot">${I.clip}${e.attachments.length}</span>` : ""}${edited ? `<span class="proof-dot">${I.pen}</span>` : ""}</span></span>
+        <span>${esc(payers)} paid${marks}</span></span>
       <span class="e"><b class="money">${fmt(e.amountP)}</b>${mineHtml}</span>
     </button>`);
     row.addEventListener("click", () => expenseDetailSheet(g, e));
@@ -983,6 +1125,11 @@ function SettingsScreen() {
 
     <div class="section-cap">Data</div>
     <div class="list ruled">
+      <button class="row pressable" id="st-import">
+        <span class="grow"><span class="ttl">Bring a group from Splitwise</span>
+        <span class="cap">From the spreadsheet Splitwise exports, balances intact</span></span>
+        <span class="chev">${I.chevR}</span>
+      </button>
       <button class="row pressable" id="st-export">
         <span class="grow"><span class="ttl">Export ledger</span>
         <span class="cap">Groups, expenses, settlements and history as JSON</span></span>
@@ -1000,7 +1147,7 @@ function SettingsScreen() {
 
     <div class="empty" style="padding-top:40px">
       <div class="mark">${MARK}</div>
-      <h3>Settld 0.5</h3>
+      <h3>Settld 0.6</h3>
       <p>Split. Prove. Settle.<br>Core splitting stays free. Your device remains the source of truth.</p>
       <a class="made-by" href="https://thealgothrim.com" target="_blank" rel="noopener">Designed and built by Gaurav Kumar · The Algothrim</a>
       <div><a class="made-by" href="privacy.html">Privacy</a></div>
@@ -1099,6 +1246,7 @@ function SettingsScreen() {
     swatchBox.append(sw);
   }
 
+  $("#st-import", view).addEventListener("click", () => importSheet());
   $("#st-export", view).addEventListener("click", async () => {
     const data = await store.exportJson();
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
@@ -1186,57 +1334,166 @@ async function finishAccountDeletion(onFail) {
   toast("Account deleted");
 }
 
-/* ---------- trip summary ---------- */
+/* ---------- summary and charts ---------- */
 
-function tripSummarySheet(g) {
-  const { exps, setts, bal, spend } = groupCalc(g);
+const DAY = 86400000;
+const MONTH = new Intl.DateTimeFormat("en-IN", { month: "short" });
+
+// Spend per bucket of time: days for anything up to a month (a trip), months
+// beyond that (a flat), capped to the latest twelve.
+function spendOverTime(exps, amountOf) {
+  const dated = exps.filter((e) => amountOf(e) > 0);
+  if (!dated.length) return null;
+  const first = Math.min(...dated.map((e) => e.date));
+  const last = Math.max(...dated.map((e) => e.date));
+  const byDay = last - first <= 31 * DAY;
+  const buckets = new Map();
+  if (byDay) {
+    for (let t = new Date(first).setHours(12, 0, 0, 0); t <= last + DAY / 2; t += DAY) {
+      buckets.set(dayKey(t), { label: String(new Date(t).getDate()), title: dayLabel(t), amount: 0 });
+    }
+  } else {
+    const start = new Date(first);
+    const end = new Date(last);
+    for (let y = start.getFullYear(), m = start.getMonth(); y < end.getFullYear() || (y === end.getFullYear() && m <= end.getMonth()); m === 11 ? ((m = 0), (y += 1)) : (m += 1)) {
+      const d = new Date(y, m, 1);
+      buckets.set(`${y}-${m}`, { label: MONTH.format(d), title: d.toLocaleDateString("en-IN", { month: "long", year: "numeric" }), amount: 0 });
+    }
+  }
+  for (const e of dated) {
+    const d = new Date(e.date);
+    const k = byDay ? dayKey(e.date) : `${d.getFullYear()}-${d.getMonth()}`;
+    const b = buckets.get(k);
+    if (b) b.amount += amountOf(e);
+  }
+  return { byDay, buckets: [...buckets.values()].slice(-12) };
+}
+
+// The donut's centre is small: whole rupees, and lakhs past ₹1,00,000.
+const WHOLE = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 });
+const LAKHS = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", notation: "compact", maximumFractionDigits: 2 });
+const donutMoney = (paise) => (paise >= 10000000 ? LAKHS : WHOLE).format(paise / 100);
+
+function summarySheet(g) {
+  const { exps, setts, bal } = groupCalc(g);
   const you = store.youOf(g);
   const net = bal.get(you?.id) ?? 0;
-  const paid = exps.reduce(
-    (sum, expense) => sum + expense.payers.filter((p) => p.memberId === you?.id).reduce((n, p) => n + p.amountP, 0),
-    0,
-  );
-  const cleared = setts.reduce((sum, settlement) => sum + settlement.amountP, 0);
-  const breakdown = CATS.map((cat, index) => ({
-    ...cat,
-    color: `var(--chart-${(index % 6) + 1})`,
-    amount: exps.filter((e) => e.category === cat.id).reduce((sum, e) => sum + e.amountP, 0),
-  })).filter((cat) => cat.amount > 0);
-  let cursor = 0;
-  const segments = breakdown.map((cat) => {
-    const start = cursor;
-    cursor += spend ? (cat.amount / spend) * 100 : 0;
-    return `${cat.color} ${start.toFixed(2)}% ${cursor.toFixed(2)}%`;
-  });
-  const chart = segments.length ? `conic-gradient(${segments.join(",")})` : "var(--line)";
+  const shares = new Map(exps.map((e) => [e.id, computeShares(e)]));
+  const paidBy = (id) =>
+    exps.reduce((sum, e) => sum + e.payers.filter((p) => p.memberId === id).reduce((n, p) => n + p.amountP, 0), 0);
+  const shareOf = (id) => exps.reduce((sum, e) => sum + (shares.get(e.id).get(id) ?? 0), 0);
+  const cleared = setts.reduce((sum, s) => sum + s.amountP, 0);
+  let scope = "all";
 
   const body = el(`<div>
-    <div class="summary-chart-row">
-      <div class="spend-donut" style="--chart:${chart}" role="img" aria-label="Group spend by category">
-        <div><span>Total spent</span><strong class="money">${fmt(spend)}</strong><small>${exps.length} expenses</small></div>
-      </div>
-      <div class="summary-legend"></div>
+    <div class="seg sum-scope" role="tablist" aria-label="Whose spending">
+      <button data-s="all">Everyone</button>
+      <button data-s="you">Your share</button>
     </div>
+    <div class="sum-charts"></div>
+    <div class="section-cap">Balances</div>
     <div class="summary-metrics">
-      <div><span>You paid</span><strong class="money">${fmt(paid)}</strong></div>
+      <div><span>You paid</span><strong class="money">${fmt(paidBy(you?.id))}</strong></div>
       <div><span>${net > 0 ? "You get" : net < 0 ? "You owe" : "Your balance"}</span><strong class="money ${net > 0 ? "pos" : net < 0 ? "debt" : ""}">${net === 0 ? "All clear" : fmt(Math.abs(net))}</strong></div>
       <div><span>Payments recorded</span><strong class="money">${fmt(cleared)}</strong></div>
     </div>
-    <p class="summary-note">Category spend, what you paid, and your balance are kept separate because they are not parts of one total.</p>
+    <p class="summary-note">What was spent, what you paid and your balance are kept apart because they are not parts of one total.</p>
   </div>`);
-  const legend = $(".summary-legend", body);
-  for (const cat of breakdown) {
-    legend.append(el(`<div class="legend-row"><i style="background:${cat.color}"></i><span>${cat.emoji} ${esc(cat.label)}</span><strong class="money">${fmt(cat.amount)}</strong></div>`));
-  }
-  if (!breakdown.length) legend.append(el(`<p class="hint">No category spend yet.</p>`));
+  const charts = $(".sum-charts", body);
+  const seg = $(".sum-scope", body);
+
+  const draw = () => {
+    for (const b of seg.querySelectorAll("button")) {
+      const on = b.dataset.s === scope;
+      b.setAttribute("role", "tab");
+      b.classList.toggle("on", on);
+      b.setAttribute("aria-selected", String(on));
+    }
+    const amountOf = scope === "you" ? (e) => shares.get(e.id).get(you?.id) ?? 0 : (e) => e.amountP;
+    const total = exps.reduce((sum, e) => sum + amountOf(e), 0);
+    charts.replaceChildren();
+
+    // By category: the six largest get a colour, the rest are grouped.
+    const cats = CATS.map((cat) => ({ ...cat, amount: exps.filter((e) => e.category === cat.id).reduce((s, e) => s + amountOf(e), 0) }))
+      .filter((c) => c.amount > 0)
+      .sort((a, b) => b.amount - a.amount);
+    const shown = cats.slice(0, cats.length > 6 ? 5 : 6).map((c, i) => ({ ...c, color: `var(--chart-${i + 1})` }));
+    if (cats.length > 6) {
+      shown.push({ id: "rest", label: `${cats.length - 5} more`, icon: "receipt", color: "var(--text-3)", amount: cats.slice(5).reduce((s, c) => s + c.amount, 0) });
+    }
+    let cursor = 0;
+    const segments = shown.map((c) => {
+      const start = cursor;
+      cursor += total ? (c.amount / total) * 100 : 0;
+      return `${c.color} ${start.toFixed(2)}% ${cursor.toFixed(2)}%`;
+    });
+    const donut = segments.length ? `conic-gradient(${segments.join(",")})` : "var(--line)";
+    const catBox = el(`<div class="summary-chart-row">
+      <div class="spend-donut" style="--chart:${donut}" role="img" aria-label="${scope === "you" ? "Your share" : "Group spend"} by category">
+        <div><span>${scope === "you" ? "Your share" : "Total spent"}</span><strong class="money" title="${fmt(total)}">${donutMoney(total)}</strong><small>${exps.length} expense${exps.length === 1 ? "" : "s"}</small></div>
+      </div>
+      <div class="summary-legend"></div>
+    </div>`);
+    const legend = $(".summary-legend", catBox);
+    for (const c of shown) {
+      legend.append(el(`<div class="legend-row"><i style="background:${c.color}"></i><span>${c.id === "rest" ? "" : svg(c.icon)}${esc(c.label)}</span><strong class="money">${fmt(c.amount)}</strong></div>`));
+    }
+    if (!shown.length) legend.append(el(`<p class="hint">Nothing spent yet.</p>`));
+    charts.append(catBox);
+
+    // Over time.
+    const time = spendOverTime(exps, amountOf);
+    if (time && time.buckets.length > 1) {
+      const peak = time.buckets.reduce((a, b) => (b.amount > a.amount ? b : a));
+      const bars = el(`<div>
+        <div class="section-cap">${time.byDay ? "Day by day" : "Month by month"}</div>
+        <div class="bars" role="img" aria-label="${esc(`${time.byDay ? "Daily" : "Monthly"} spend, highest ${fmt(peak.amount)} on ${peak.title}`)}"></div>
+        <div class="hint">Highest: ${fmt(peak.amount)}, ${esc(peak.title)}</div>
+      </div>`);
+      const box = $(".bars", bars);
+      const dense = time.buckets.length > 16;
+      time.buckets.forEach((b, i) => {
+        const h = peak.amount ? Math.max(b.amount ? 4 : 0, Math.round((b.amount / peak.amount) * 100)) : 0;
+        const label = !dense || i % 5 === 0 || i === time.buckets.length - 1 ? esc(b.label) : "";
+        box.append(el(`<div class="bar${b === peak ? " peak" : ""}" title="${esc(`${b.title}: ${fmt(b.amount)}`)}"><div class="bar-fill"><i style="height:${h}%"></i></div><span>${label}</span></div>`));
+      });
+      charts.append(bars);
+    }
+
+    // By person: who paid and whose share it was.
+    if (scope === "all" && g.members.length > 1) {
+      const rows = g.members.map((m) => ({ m, paid: paidBy(m.id), share: shareOf(m.id) }));
+      const max = Math.max(1, ...rows.map((r) => Math.max(r.paid, r.share)));
+      const people = el(`<div><div class="section-cap">Who paid, and whose share it was</div><div class="person-bars"></div></div>`);
+      const list = $(".person-bars", people);
+      for (const r of rows.sort((a, b) => b.paid - a.paid)) {
+        list.append(el(`<div class="person-bar">
+          ${avatarHtml(r.m, "sm")}
+          <div class="pb-main">
+            <div class="pb-top"><span>${esc(displayName(r.m))}</span><span class="money">paid ${fmt(r.paid)}</span></div>
+            <div class="pb-track" aria-hidden="true"><i style="width:${(r.paid / max) * 100}%"></i><b style="left:${(r.share / max) * 100}%"></b></div>
+            <div class="pb-cap money">share ${fmt(r.share)}</div>
+          </div>
+        </div>`));
+      }
+      charts.append(people);
+    }
+  };
+  seg.addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-s]");
+    if (!b || b.dataset.s === scope) return;
+    scope = b.dataset.s;
+    draw();
+  });
+  draw();
   const foot = el(`<button class="btn primary">${I.share} Share summary</button>`);
-  openSheet({ title: "Trip summary", body, footer: foot });
+  openSheet({ title: "Summary", body, footer: foot });
   foot.addEventListener("click", () => shareSummary(g));
 }
 
 async function shareSummary(g) {
   const { bal, spend } = groupCalc(g);
-  const lines = [`${g.emoji ?? ""} ${g.name} · Settld`, `Spent so far: ${fmt(spend)}`, ""];
+  const lines = [`${g.name} · Settld`, `Spent so far: ${fmt(spend)}`, ""];
   for (const m of g.members) {
     const v = bal.get(m.id) ?? 0;
     lines.push(`${m.name}: ${v === 0 ? "settled" : (v > 0 ? "gets back " : "owes ") + fmt(Math.abs(v))}`);
@@ -1423,11 +1680,12 @@ function welcomeNameSheet(prefill) {
 
 /* ---------- group creation and settings ---------- */
 
-function emojiChips(selected) {
-  const box = el(`<div class="chips" role="group" aria-label="Group icon" style="margin-top:4px"></div>`);
-  for (const e of GROUP_EMOJIS) {
-    const active = e === selected;
-    const c = el(`<button class="chip ${active ? "on" : ""}" data-e="${e}" aria-label="Use ${e} as the group icon" aria-pressed="${active}">${e}</button>`);
+function iconChips(selected) {
+  const box = el(`<div class="icon-picks" role="group" aria-label="Group icon"></div>`);
+  const current = groupIconId(selected);
+  for (const gi of GROUP_ICONS) {
+    const active = gi.id === current;
+    const c = el(`<button class="icon-pick ${active ? "on" : ""}" data-e="${gi.id}" aria-label="${esc(gi.label)}" aria-pressed="${active}">${svg(gi.icon)}</button>`);
     c.addEventListener("click", () => {
       for (const x of box.children) {
         const on = x === c;
@@ -1455,7 +1713,7 @@ function newGroupSheet() {
     <div class="chips" id="ng-chips" style="margin-top:10px"></div>
     <div class="hint">You can invite them to join with their own account once the group exists.</div>
   </div>`);
-  const emo = emojiChips(GROUP_EMOJIS[0]);
+  const emo = iconChips("trip");
   $(".ng-emoji", body).append(emo);
 
   const chips = $("#ng-chips", body);
@@ -1483,7 +1741,7 @@ function newGroupSheet() {
     const name = $("#ng-name", body).value.trim();
     if (!name) return toast("Give the group a name");
     if (input.value.trim()) addName();
-    const emoji = emo.querySelector(".on")?.dataset.e ?? GROUP_EMOJIS[0];
+    const emoji = emo.querySelector(".on")?.dataset.e ?? "trip";
     const g = await store.createGroup({ name, emoji, memberNames: names });
     closeSheet(false, () => (location.hash = `#/group/${g.id}`));
   });
@@ -1653,7 +1911,7 @@ function JoinScreen(gid) {
     const unclaimed = (remote.members ?? []).filter((m) => !m.uid);
     const box = el(`<div>
       <div class="group-title-line" style="margin-top:10px">
-        <span class="group-emoji">${esc(remote.emoji ?? "🧾")}</span>
+        <span class="group-emoji">${groupIcon(remote)}</span>
         <h1>${esc(remote.name ?? "Group")}</h1>
       </div>
       <div class="section-cap">Which one is you?</div>
@@ -1700,16 +1958,57 @@ function JoinScreen(gid) {
   return view;
 }
 
+// The group's saved split, limited to people still in the group; null when
+// there is none or nobody in it is left.
+function validDefaultSplit(g) {
+  const d = g.defaultSplit;
+  if (!d || !["equal", "percent", "shares"].includes(d.mode)) return null;
+  const ids = new Set(g.members.map((m) => m.id));
+  const participants = (d.participants ?? []).filter((p) => ids.has(p.memberId));
+  return participants.length ? { mode: d.mode, participants } : null;
+}
+
+function describeDefaultSplit(g) {
+  const d = validDefaultSplit(g);
+  if (!d) return "Equally between everyone";
+  const name = (p) => displayName(store.memberOf(g, p.memberId));
+  if (d.mode === "equal") {
+    return d.participants.length === g.members.length ? "Equally between everyone" : `Equally between ${d.participants.map(name).join(", ")}`;
+  }
+  if (d.mode === "percent") return d.participants.map((p) => `${name(p)} ${p.value}%`).join(", ");
+  return d.participants.map((p) => `${name(p)} ${p.value} share${Number(p.value) === 1 ? "" : "s"}`).join(", ");
+}
+
 function groupSettingsSheet(g) {
   const body = el(`<div>
     <label class="cap-label" for="gs-name" style="margin-top:4px">Group name</label>
     <input class="in" id="gs-name" value="${esc(g.name)}" maxlength="${store.LIMITS.groupName}">
     <label class="cap-label">Icon</label>
     <div class="gs-emoji"></div>
+    <label class="cap-label">New expenses start split</label>
+    <div class="list ruled gs-split"></div>
     <button class="btn danger" id="gs-del" style="margin-top:26px">Delete group</button>
   </div>`);
-  const emo = emojiChips(g.emoji ?? GROUP_EMOJIS[0]);
+  const emo = iconChips(g.emoji);
   $(".gs-emoji", body).append(emo);
+
+  const splitBox = $(".gs-split", body);
+  const drawSplit = () => {
+    const custom = validDefaultSplit(g);
+    const row = el(`<div class="row">
+      <span class="tile">${I.sliders}</span>
+      <span class="grow"><span class="ttl">${esc(describeDefaultSplit(g))}</span>
+        <span class="cap">${custom ? "Saved from an expense" : "Save another split from any expense with “Use for new expenses”"}</span></span>
+      ${custom ? `<button class="btn quiet small gs-reset">Reset</button>` : ""}
+    </div>`);
+    $(".gs-reset", row)?.addEventListener("click", async () => {
+      await store.setDefaultSplit(g, null);
+      drawSplit();
+      toast("New expenses split equally again");
+    });
+    splitBox.replaceChildren(row);
+  };
+  drawSplit();
 
   armDanger($("#gs-del", body), async () => {
     await store.deleteGroup(g);
@@ -1722,7 +2021,7 @@ function groupSettingsSheet(g) {
   foot.addEventListener("click", async () => {
     const name = $("#gs-name", body).value.trim();
     if (!name) return toast("Name can't be empty");
-    await store.renameGroup(g, name, emo.querySelector(".on")?.dataset.e ?? g.emoji);
+    await store.renameGroup(g, name, emo.querySelector(".on")?.dataset.e ?? groupIconId(g.emoji));
     closeSheet();
   });
 }
@@ -1761,23 +2060,71 @@ function memberSheet(g, m, onDone) {
 
 /* ---------- expense sheet ---------- */
 
+const MODE_LABEL = { equal: "equally", exact: "by exact amounts", percent: "by percent", shares: "by shares", items: "by items" };
+
+const lastCurrency = (g) => {
+  try {
+    return localStorage.getItem(`settld.cur.${g.id}`) ?? "INR";
+  } catch {
+    return "INR";
+  }
+};
+const rememberCurrency = (g, code) => {
+  try {
+    localStorage.setItem(`settld.cur.${g.id}`, code);
+  } catch {
+    /* only a convenience */
+  }
+};
+
+function currencySheet(current, onPick) {
+  const body = el(`<div class="list ruled"></div>`);
+  for (const [code, name] of CURRENCIES) {
+    const on = code === current;
+    const row = el(`<button class="row pressable" aria-pressed="${on}">
+      <span class="tile cur-tile">${esc(currencySymbol(code))}</span>
+      <span class="grow"><span class="ttl">${esc(name)}</span><span class="cap">${code}</span></span>
+      ${on ? `<span class="chev on-mark">${I.check}</span>` : ""}
+    </button>`);
+    row.addEventListener("click", () => closeSheet(false, () => onPick(code)));
+    body.append(row);
+  }
+  openSheet({ title: "Currency", body });
+}
+
 function expenseSheet(g, existing) {
+  const fx0 = existing?.fx ?? null;
+  const cur0 = fx0?.currency ?? (existing ? "INR" : lastCurrency(g));
+  // An expense entered abroad is edited in the currency it was typed in; its
+  // rupee parts are spread back over the foreign total so they still add up.
+  const back = (partsP) => (fx0 ? spreadInr(Math.round(fx0.amount * 100), partsP) : partsP);
+  const def = existing ? null : validDefaultSplit(g);
   const s = existing
     ? {
         desc: existing.desc,
-        amountStr: fromPaise(existing.amountP),
+        amountStr: fromPaise(fx0 ? Math.round(fx0.amount * 100) : existing.amountP),
         date: existing.date,
         category: existing.category,
+        catTouched: true,
         multi: existing.payers.length > 1,
-        payers: existing.payers.map((p) => ({ memberId: p.memberId, amountStr: fromPaise(p.amountP) })),
+        payers: (() => {
+          const amounts = back(existing.payers.map((p) => p.amountP));
+          return existing.payers.map((p, i) => ({ memberId: p.memberId, amountStr: fromPaise(amounts[i]) }));
+        })(),
         parts: new Set(existing.split.participants.map((p) => p.memberId)),
         mode: existing.split.mode,
-        values: new Map(
-          existing.split.participants.map((p) => [
-            p.memberId,
-            existing.split.mode === "exact" ? fromPaise(p.valueP ?? 0) : String(p.value ?? ""),
-          ]),
-        ),
+        values: (() => {
+          const ps = existing.split.participants;
+          if (existing.split.mode !== "exact") return new Map(ps.map((p) => [p.memberId, String(p.value ?? "")]));
+          const amounts = back(ps.map((p) => p.valueP ?? 0));
+          return new Map(ps.map((p, i) => [p.memberId, fromPaise(amounts[i])]));
+        })(),
+        items: (existing.split.items ?? []).map((it) => ({
+          name: it.name ?? "",
+          amountStr: fromPaise(fx0 ? Math.round(it.amountP / fx0.rate) : it.amountP),
+          ids: new Set(it.memberIds),
+        })),
+        repeat: existing.repeat?.freq ?? "none",
         att: [...(existing.attachments ?? []).map((id) => ({ id }))],
         notes: existing.notes ?? "",
       }
@@ -1786,25 +2133,41 @@ function expenseSheet(g, existing) {
         amountStr: "",
         date: Date.now(),
         category: "other",
+        catTouched: false,
         multi: false,
         payers: [{ memberId: store.youOf(g)?.id ?? g.members[0].id, amountStr: "" }],
-        parts: new Set(g.members.map((m) => m.id)),
-        mode: "equal",
-        values: new Map(),
+        parts: new Set(def ? def.participants.map((p) => p.memberId) : g.members.map((m) => m.id)),
+        mode: def?.mode ?? "equal",
+        values: new Map(def && def.mode !== "equal" ? def.participants.map((p) => [p.memberId, String(p.value ?? "")]) : []),
+        items: [],
+        repeat: "none",
         att: [],
         notes: "",
       };
+  s.cur = cur0;
+  s.rate = fx0?.rate ?? null;
+  s.rateSource = fx0 ? "saved" : null;
+  s.saveDefault = false;
+  const entry = (cents) => (s.cur === "INR" ? fmt(cents) : fmtForeign(cents / 100, s.cur));
 
   const body = el(`<div>
-    <div class="amount-shell"><span aria-hidden="true">₹</span><input class="amount-in money" inputmode="decimal" placeholder="0" value="${esc(s.amountStr)}" aria-label="Amount in rupees"></div>
-    <label class="sr-only" for="x-desc">Expense description</label>
-    <input class="in expense-desc" id="x-desc" placeholder="What was it?" value="${esc(s.desc)}" maxlength="${store.LIMITS.expenseDesc}">
+    <div class="amount-shell">
+      <button class="cur-btn" type="button"></button>
+      <input class="amount-in money" inputmode="decimal" placeholder="0" value="${esc(s.amountStr)}">
+    </div>
+    <div class="fx-line" role="status" aria-live="polite"></div>
+    <div class="desc-row">
+      <button class="tile desc-cat" type="button"></button>
+      <label class="sr-only" for="x-desc">Expense description</label>
+      <input class="in expense-desc" id="x-desc" placeholder="What was it?" value="${esc(s.desc)}" maxlength="${store.LIMITS.expenseDesc}" autocomplete="off">
+    </div>
     <label class="cap-label">Paid by</label>
     <div class="x-payers"></div>
     <label class="cap-label">Split between</label>
     <div class="chips x-parts"></div>
+    <div class="hint x-parts-hint"></div>
     <details class="expense-more" ${existing ? "open" : ""}>
-      <summary><span class="summary-icon">${I.clip}</span><span><strong>More details and proof</strong><small>Split method, date, category, receipt, notes</small></span><span class="summary-chev">${I.chevR}</span></summary>
+      <summary><span class="summary-icon">${I.clip}</span><span><strong>More details and proof</strong><small>Split method, category, date, repeats, receipt, notes</small></span><span class="summary-chev">${I.chevR}</span></summary>
       <div class="expense-more-body">
         <label class="cap-label">How to split</label>
         <div class="seg x-mode" role="tablist" aria-label="Split method">
@@ -1812,12 +2175,20 @@ function expenseSheet(g, existing) {
           <button data-m="exact">Exact</button>
           <button data-m="percent">Percent</button>
           <button data-m="shares">Shares</button>
+          <button data-m="items">Items</button>
         </div>
         <div class="x-values" style="margin-top:14px"></div>
+        <label class="check-row x-default-row" hidden>
+          <input type="checkbox" class="x-default">
+          <span>Use this split for new expenses in ${esc(g.name)}</span>
+        </label>
         <label class="cap-label">Category</label>
         <div class="chips x-cats"></div>
         <label class="cap-label" for="x-date">Date</label>
         <input class="in" id="x-date" type="date" value="${toDateInput(s.date)}">
+        <label class="cap-label">Repeats</label>
+        <div class="chips x-repeat" role="group" aria-label="Repeats"></div>
+        <div class="hint x-repeat-hint"></div>
         <label class="cap-label">Proof <span class="dim">(receipt or payment screenshot)</span></label>
         <div class="proof-add-copy">${I.receipt}<span><strong>Keep the record clear</strong><small>Images are compressed on this device before backup.</small></span></div>
         <div class="thumbs x-thumbs"></div>
@@ -1828,31 +2199,145 @@ function expenseSheet(g, existing) {
     </details>
   </div>`);
 
+  /* amount and currency */
   const amountIn = $(".amount-in", body);
+  const curBtn = $(".cur-btn", body);
+  const fxLine = $(".fx-line", body);
+  let editingRate = false;
+  function drawCurrency() {
+    curBtn.textContent = currencySymbol(s.cur);
+    curBtn.setAttribute("aria-label", `Currency: ${currencyName(s.cur)}. Change`);
+    amountIn.setAttribute("aria-label", `Amount in ${currencyName(s.cur)}`);
+    curBtn.classList.toggle("foreign", s.cur !== "INR");
+  }
+  function drawFx() {
+    if (s.cur === "INR") {
+      fxLine.hidden = true;
+      fxLine.replaceChildren();
+      return;
+    }
+    fxLine.hidden = false;
+    const cents = toPaise(s.amountStr) || 0;
+    const credit = `<a class="fx-credit" href="https://www.exchangerate-api.com" target="_blank" rel="noopener">Rates by ExchangeRate-API</a>`;
+    if (s.rateSource === "loading") {
+      fxLine.innerHTML = `<span>Getting today's rate for ${esc(s.cur)}</span>`;
+      return;
+    }
+    const ask = editingRate || !(s.rate > 0);
+    fxLine.innerHTML = `
+      <span class="fx-sum">${s.rate > 0 ? `${cents ? `<b class="money">${fmt(toInrPaise(cents, s.rate))}</b> · ` : ""}1 ${esc(s.cur)} = ${fmt(Math.round(s.rate * 100))}` : `No rate for ${esc(s.cur)} yet${navigator.onLine ? "" : " while offline"}`}</span>
+      ${ask
+        ? `<span class="fx-edit"><label for="x-rate">₹ per ${esc(s.cur)}</label><input class="in money" id="x-rate" inputmode="decimal" value="${s.rate > 0 ? esc(String(s.rate)) : ""}" placeholder="0.00"></span>`
+        : `<button class="fx-change" type="button">Change rate</button>`}
+      ${s.rateSource === "live" && !ask ? credit : s.rateSource === "saved" && !ask ? `<span class="fx-src">Saved rate</span>` : ""}`;
+    $(".fx-change", fxLine)?.addEventListener("click", () => {
+      editingRate = true;
+      drawFx();
+      $("#x-rate", fxLine)?.focus();
+    });
+    $("#x-rate", fxLine)?.addEventListener("input", (e) => {
+      const r = Number(e.target.value);
+      s.rate = Number.isFinite(r) && r > 0 ? roundRate(r) : null;
+      s.rateSource = "manual";
+      const sum = $(".fx-sum", fxLine);
+      if (sum) sum.innerHTML = s.rate > 0 && cents ? `<b class="money">${fmt(toInrPaise(cents, s.rate))}</b>` : "";
+    });
+  }
+  async function loadRate() {
+    if (s.cur === "INR") return drawFx();
+    const want = s.cur;
+    s.rateSource = "loading";
+    drawFx();
+    const r = await rateFor(want);
+    if (s.cur !== want) return;
+    s.rate = r?.rate ?? null;
+    s.rateSource = r?.source ?? "none";
+    drawFx();
+  }
+  curBtn.addEventListener("click", () =>
+    currencySheet(s.cur, (code) => {
+      if (code === s.cur) return;
+      s.cur = code;
+      s.rate = null;
+      editingRate = false;
+      drawCurrency();
+      loadRate();
+      renderValues();
+      updatePayerHint();
+    }),
+  );
+  drawCurrency();
+  if (s.cur !== "INR" && !s.rate) loadRate();
+  else drawFx();
+
   amountIn.addEventListener("input", () => {
     s.amountStr = amountIn.value;
     renderValues();
     updatePayerHint();
+    if (s.cur !== "INR" && !editingRate) drawFx();
   });
-  $("#x-desc", body).addEventListener("input", (e) => (s.desc = e.target.value));
-  $("#x-date", body).addEventListener("change", (e) => (s.date = fromDateInput(e.target.value)));
-  $("#x-notes", body).addEventListener("input", (e) => (s.notes = e.target.value));
 
+  /* description and category */
+  const descCat = $(".desc-cat", body);
   const catBox = $(".x-cats", body);
+  const details = $("details.expense-more", body);
+  function markCats() {
+    descCat.innerHTML = catIcon(s.category);
+    descCat.setAttribute("aria-label", `Category: ${catOf(s.category).label}. Change`);
+    for (const x of catBox.children) {
+      const on = x.dataset.c === s.category;
+      x.classList.toggle("on", on);
+      x.setAttribute("aria-pressed", String(on));
+    }
+  }
   for (const c of CATS) {
-    const active = c.id === s.category;
-    const chip = el(`<button class="chip ${active ? "on" : ""}" data-c="${c.id}" aria-pressed="${active}">${c.emoji} ${c.label}</button>`);
+    const chip = el(`<button class="chip" data-c="${c.id}">${svg(c.icon)} ${c.label}</button>`);
     chip.addEventListener("click", () => {
       s.category = c.id;
-      for (const x of catBox.children) {
-        const on = x === chip;
-        x.classList.toggle("on", on);
-        x.setAttribute("aria-pressed", String(on));
-      }
+      s.catTouched = true;
+      markCats();
     });
     catBox.append(chip);
   }
+  markCats();
+  descCat.addEventListener("click", () => {
+    details.open = true;
+    catBox.scrollIntoView({ block: "center", behavior: "smooth" });
+  });
+  $("#x-desc", body).addEventListener("input", (e) => {
+    s.desc = e.target.value;
+    if (s.catTouched) return;
+    s.category = guessCategory(s.desc) ?? "other";
+    markCats();
+  });
+  $("#x-date", body).addEventListener("change", (e) => {
+    s.date = fromDateInput(e.target.value);
+    drawRepeat();
+  });
+  $("#x-notes", body).addEventListener("input", (e) => (s.notes = e.target.value));
 
+  /* repeats */
+  const repeatBox = $(".x-repeat", body);
+  const repeatHint = $(".x-repeat-hint", body);
+  function drawRepeat() {
+    repeatBox.replaceChildren();
+    for (const f of [{ id: "none", label: "Never" }, ...FREQS]) {
+      const on = s.repeat === f.id;
+      const chip = el(`<button class="chip ${on ? "on" : ""}" aria-pressed="${on}">${f.label}</button>`);
+      chip.addEventListener("click", () => {
+        s.repeat = f.id;
+        drawRepeat();
+      });
+      repeatBox.append(chip);
+    }
+    const next = s.repeat === "none" ? null : nextDate(s.date, makeRepeat(s.repeat, s.date));
+    repeatHint.textContent = next
+      ? `Added again automatically ${dayPhrase(next)}, and every ${freqOf(s.repeat).every} after, until you stop it.`
+      : "";
+  }
+  drawRepeat();
+
+  /* payers */
   const payersBox = $(".x-payers", body);
   function renderPayers() {
     payersBox.replaceChildren();
@@ -1868,18 +2353,20 @@ function expenseSheet(g, existing) {
         chips.append(chip);
       }
       payersBox.append(chips);
-      const link = el(`<button class="payer-multi-toggle">+ More than one person paid</button>`);
-      link.addEventListener("click", () => {
-        s.multi = true;
-        renderPayers();
-      });
-      payersBox.append(link);
+      if (g.members.length > 1) {
+        const link = el(`<button class="payer-multi-toggle">+ More than one person paid</button>`);
+        link.addEventListener("click", () => {
+          s.multi = true;
+          renderPayers();
+        });
+        payersBox.append(link);
+      }
     } else {
       for (const m of g.members) {
         const cur = s.payers.find((p) => p.memberId === m.id);
         const row = el(`<div class="split-row">
           <button class="chip ${cur ? "on" : ""}" aria-pressed="${Boolean(cur)}" aria-label="Toggle ${esc(displayName(m))} as a payer" style="flex:1;justify-content:flex-start">${avatarHtml(m, "sm")} ${esc(displayName(m))}</button>
-          <input class="in money" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0" value="${esc(cur?.amountStr ?? "")}" aria-label="Amount paid by ${esc(displayName(m))} in rupees" ${cur ? "" : "disabled"}>
+          <input class="in money" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0" value="${esc(cur?.amountStr ?? "")}" aria-label="Amount paid by ${esc(displayName(m))}" ${cur ? "" : "disabled"}>
         </div>`);
         row.querySelector(".chip").addEventListener("click", () => {
           if (cur) s.payers = s.payers.filter((p) => p.memberId !== m.id);
@@ -1910,12 +2397,14 @@ function expenseSheet(g, existing) {
         : left === 0
           ? "Payments match the total"
           : left > 0
-            ? `${fmt(left)} left to assign`
-            : `${fmt(-left)} over the total`;
+            ? `${entry(left)} left to assign`
+            : `${entry(-left)} over the total`;
   }
   renderPayers();
 
+  /* participants */
   const partsBox = $(".x-parts", body);
+  const partsHint = $(".x-parts-hint", body);
   function renderParts() {
     partsBox.replaceChildren();
     for (const m of g.members) {
@@ -1929,11 +2418,17 @@ function expenseSheet(g, existing) {
       });
       partsBox.append(chip);
     }
+    partsHint.textContent = s.mode === "items" ? "New items start with these people. Each item says who had it." : "";
+    partsHint.hidden = s.mode !== "items";
   }
   renderParts();
 
+  /* split method */
   const modeSeg = $(".x-mode", body);
   const valuesBox = $(".x-values", body);
+  const defaultRow = $(".x-default-row", body);
+  const defaultBox = $(".x-default", body);
+  defaultBox.addEventListener("change", () => (s.saveDefault = defaultBox.checked));
   const markMode = () => {
     for (const b of modeSeg.querySelectorAll("button")) {
       const active = b.dataset.m === s.mode;
@@ -1948,7 +2443,9 @@ function expenseSheet(g, existing) {
     const b = e.target.closest("button[data-m]");
     if (!b) return;
     s.mode = b.dataset.m;
+    if (s.mode === "items" && !s.items.length) s.items.push({ name: "", amountStr: "", ids: new Set(s.parts) });
     markMode();
+    renderParts();
     renderValues();
   });
   modeSeg.addEventListener("keydown", (e) => {
@@ -1962,8 +2459,70 @@ function expenseSheet(g, existing) {
     buttons[next].focus();
   });
 
+  function drawDefaultToggle() {
+    const everyoneEqual = s.mode === "equal" && s.parts.size === g.members.length;
+    const can = ["equal", "percent", "shares"].includes(s.mode) && !(everyoneEqual && !validDefaultSplit(g)) && s.parts.size > 0;
+    defaultRow.hidden = !can;
+    if (!can) {
+      s.saveDefault = false;
+      defaultBox.checked = false;
+    }
+  }
+
+  function renderItems() {
+    const members = g.members;
+    s.items.forEach((item, index) => {
+      const row = el(`<div class="item-row">
+        <div class="item-top">
+          <input class="in item-name" placeholder="Item ${index + 1}" value="${esc(item.name)}" maxlength="120" aria-label="Item ${index + 1} name">
+          <input class="in money item-amt" inputmode="decimal" placeholder="0" value="${esc(item.amountStr)}" aria-label="Item ${index + 1} amount">
+          <button class="icon-btn item-del" aria-label="Remove item ${index + 1}">${I.x}</button>
+        </div>
+        <div class="item-who" role="group" aria-label="Who had item ${index + 1}"></div>
+      </div>`);
+      $(".item-name", row).addEventListener("input", (e) => (item.name = e.target.value));
+      $(".item-amt", row).addEventListener("input", (e) => {
+        item.amountStr = e.target.value;
+        updateValueHint();
+      });
+      $(".item-del", row).addEventListener("click", () => {
+        s.items.splice(index, 1);
+        renderValues();
+      });
+      const who = $(".item-who", row);
+      for (const m of members) {
+        const on = item.ids.has(m.id);
+        const b = el(`<button class="who-pick ${on ? "on" : ""}" aria-pressed="${on}" aria-label="${esc(displayName(m))} had this">${avatarHtml(m, "sm")}<span>${esc(displayName(m))}</span></button>`);
+        b.addEventListener("click", () => {
+          if (item.ids.has(m.id)) item.ids.delete(m.id);
+          else item.ids.add(m.id);
+          b.classList.toggle("on", item.ids.has(m.id));
+          b.setAttribute("aria-pressed", String(item.ids.has(m.id)));
+          updateValueHint();
+        });
+        who.append(b);
+      }
+      valuesBox.append(row);
+    });
+    const add = el(`<button class="payer-multi-toggle">+ Add an item</button>`);
+    add.addEventListener("click", () => {
+      s.items.push({ name: "", amountStr: "", ids: new Set(s.parts) });
+      renderValues();
+      const names = valuesBox.querySelectorAll(".item-name");
+      names[names.length - 1]?.focus();
+    });
+    valuesBox.append(add);
+  }
+
   function renderValues() {
     valuesBox.replaceChildren();
+    drawDefaultToggle();
+    if (s.mode === "items") {
+      renderItems();
+      valuesBox.append(el(`<div class="hint x-valhint" role="status" aria-live="polite"></div>`));
+      updateValueHint();
+      return;
+    }
     const ids = [...s.parts];
     const total = toPaise(s.amountStr) || 0;
     if (!ids.length) {
@@ -1971,10 +2530,10 @@ function expenseSheet(g, existing) {
       return;
     }
     if (s.mode === "equal") {
-      valuesBox.append(el(`<div class="hint">${total > 0 ? `About ${fmt(Math.round(total / ids.length))} each, ${ids.length} people` : `${ids.length} people, equal shares`}</div>`));
+      valuesBox.append(el(`<div class="hint">${total > 0 ? `About ${entry(Math.round(total / ids.length))} each, ${ids.length} ${ids.length === 1 ? "person" : "people"}` : `${ids.length} ${ids.length === 1 ? "person" : "people"}, equal shares`}</div>`));
       return;
     }
-    const unit = s.mode === "exact" ? "₹" : s.mode === "percent" ? "%" : "shares";
+    const unit = s.mode === "exact" ? esc(currencySymbol(s.cur)) : s.mode === "percent" ? "%" : "shares";
     for (const idm of ids) {
       const m = store.memberOf(g, idm);
       const row = el(`<div class="split-row">
@@ -1999,11 +2558,25 @@ function expenseSheet(g, existing) {
     const total = toPaise(s.amountStr) || 0;
     let text = "";
     let ok = false;
-    if (s.mode === "exact") {
+    if (s.mode === "items") {
+      const filled = s.items.filter((it) => (toPaise(it.amountStr) || 0) > 0);
+      const sum = filled.reduce((a, it) => a + toPaise(it.amountStr), 0);
+      const orphan = filled.some((it) => !it.ids.size);
+      ok = sum > 0 && !orphan;
+      text = orphan
+        ? "Pick who had each item"
+        : !sum
+          ? "Add what each item cost"
+          : !total || total === sum
+            ? `Items come to ${entry(sum)}${!total ? ", which becomes the total" : ", the whole bill"}`
+            : total > sum
+              ? `Items ${entry(sum)}. The other ${entry(total - sum)} (tax, service, tip) is shared in proportion.`
+              : `Items ${entry(sum)}. The ${entry(sum - total)} off the bill is shared out in proportion.`;
+    } else if (s.mode === "exact") {
       const sum = ids.reduce((a, idm) => a + (toPaise(s.values.get(idm)) || 0), 0);
       const left = total - sum;
       ok = left === 0 && total > 0;
-      text = ok ? "Adds up perfectly" : left > 0 ? `${fmt(left)} left to assign` : `${fmt(-left)} over the total`;
+      text = ok ? "Adds up perfectly" : left > 0 ? `${entry(left)} left to assign` : `${entry(-left)} over the total`;
     } else if (s.mode === "percent") {
       const values = ids.map((idm) => Number(s.values.get(idm) || 0));
       const invalid = values.some((value) => !Number.isFinite(value) || value < 0);
@@ -2022,6 +2595,7 @@ function expenseSheet(g, existing) {
   }
   renderValues();
 
+  /* proof */
   const thumbs = $(".x-thumbs", body);
   const fileIn = $(".x-file", body);
   function renderThumbs() {
@@ -2062,37 +2636,69 @@ function expenseSheet(g, existing) {
   if (!existing) setTimeout(() => amountIn.focus(), 350);
 
   foot.addEventListener("click", async () => {
-    const amountP = toPaise(s.amountStr);
-    if (!Number.isFinite(amountP) || amountP <= 0) return toast("Enter the amount first");
+    const foreign = s.cur !== "INR";
+    const rate = foreign ? s.rate : 1;
+    if (foreign && !(rate > 0)) {
+      editingRate = true;
+      drawFx();
+      return toast(`Enter how many rupees one ${s.cur} is`);
+    }
+    // Everything typed is in the entry currency; convert once, at the end,
+    // spreading rupees over the typed parts so every total stays exact.
+    const itemRows = s.items
+      .map((it) => ({ name: it.name.trim().slice(0, 120), cents: toPaise(it.amountStr) || 0, ids: [...it.ids] }))
+      .filter((it) => it.cents > 0);
+    let totalCents = toPaise(s.amountStr);
+    if (s.mode === "items" && !(totalCents > 0)) totalCents = itemRows.reduce((a, it) => a + it.cents, 0);
+    if (!Number.isFinite(totalCents) || totalCents <= 0) return toast("Enter the amount first");
+    const amountP = foreign ? toInrPaise(totalCents, rate) : totalCents;
+    if (!(amountP > 0)) return toast("That amount is too small to record");
     const desc = s.desc.trim();
     if (!desc) return toast("Give it a name");
     if (s.att.length > store.LIMITS.attachments) return toast(`Remove proofs until ${store.LIMITS.attachments} remain`);
-    const ids = [...s.parts];
-    if (!ids.length) return toast("Pick who shares this");
+    const toRupees = (partsCents) => (foreign ? spreadInr(amountP, partsCents) : partsCents);
 
-    let participants;
-    if (s.mode === "equal") participants = ids.map((idm) => ({ memberId: idm }));
-    else if (s.mode === "exact") {
-      const rows = ids.map((idm) => ({ memberId: idm, valueP: toPaise(s.values.get(idm)) || 0 }));
-      if (rows.reduce((a, r) => a + r.valueP, 0) !== amountP) return toast("Exact amounts must add up to the total");
-      participants = rows;
+    let split;
+    if (s.mode === "items") {
+      if (!itemRows.length) return toast("Add what each item cost");
+      if (itemRows.some((it) => !it.ids.length)) return toast("Pick who had each item");
+      const itemsCents = itemRows.map((it) => it.cents);
+      const itemsP = foreign ? spreadInr(toInrPaise(itemsCents.reduce((a, v) => a + v, 0), rate), itemsCents) : itemsCents;
+      const everyone = [...new Set(itemRows.flatMap((it) => it.ids))];
+      split = {
+        mode: "items",
+        participants: everyone.map((memberId) => ({ memberId })),
+        items: itemRows.map((it, i) => ({ name: it.name, amountP: itemsP[i], memberIds: it.ids })),
+      };
     } else {
-      const rows = ids.map((idm) => ({ memberId: idm, value: Number(s.values.get(idm) || 0) }));
-      if (rows.some((row) => !Number.isFinite(row.value) || row.value < 0)) return toast("Split values cannot be negative");
-      const sum = rows.reduce((a, r) => a + r.value, 0);
-      if (s.mode === "percent" && Math.abs(sum - 100) > 0.01) return toast("Percentages must add up to 100");
-      if (s.mode === "shares" && sum <= 0) return toast("Give at least one share");
-      participants = rows;
+      const ids = [...s.parts];
+      if (!ids.length) return toast("Pick who shares this");
+      let participants;
+      if (s.mode === "equal") participants = ids.map((idm) => ({ memberId: idm }));
+      else if (s.mode === "exact") {
+        const cents = ids.map((idm) => toPaise(s.values.get(idm)) || 0);
+        if (cents.reduce((a, v) => a + v, 0) !== totalCents) return toast("Exact amounts must add up to the total");
+        const rupees = toRupees(cents);
+        participants = ids.map((idm, i) => ({ memberId: idm, valueP: rupees[i] }));
+      } else {
+        const rows = ids.map((idm) => ({ memberId: idm, value: Number(s.values.get(idm) || 0) }));
+        if (rows.some((row) => !Number.isFinite(row.value) || row.value < 0)) return toast("Split values cannot be negative");
+        const sum = rows.reduce((a, r) => a + r.value, 0);
+        if (s.mode === "percent" && Math.abs(sum - 100) > 0.01) return toast("Percentages must add up to 100");
+        if (s.mode === "shares" && sum <= 0) return toast("Give at least one share");
+        participants = rows;
+      }
+      split = { mode: s.mode, participants };
     }
 
     let payers;
     if (!s.multi) payers = [{ memberId: s.payers[0].memberId, amountP }];
     else {
-      payers = s.payers
-        .map((p) => ({ memberId: p.memberId, amountP: toPaise(p.amountStr) || 0 }))
-        .filter((p) => p.amountP > 0);
-      if (!payers.length) return toast("Who paid?");
-      if (payers.reduce((a, p) => a + p.amountP, 0) !== amountP) return toast("Payments must add up to the total");
+      const rows = s.payers.map((p) => ({ memberId: p.memberId, cents: toPaise(p.amountStr) || 0 })).filter((p) => p.cents > 0);
+      if (!rows.length) return toast("Who paid?");
+      if (rows.reduce((a, p) => a + p.cents, 0) !== totalCents) return toast("Payments must add up to the total");
+      const rupees = toRupees(rows.map((p) => p.cents));
+      payers = rows.map((p, i) => ({ memberId: p.memberId, amountP: rupees[i] }));
     }
 
     foot.disabled = true;
@@ -2104,59 +2710,121 @@ function expenseSheet(g, existing) {
       return toast("That proof image is too large to back up. Try a screenshot or smaller photo.");
     }
 
+    const repeat = s.repeat === "none" ? null : makeRepeat(s.repeat, s.date);
+    const fx = foreign ? { currency: s.cur, amount: totalCents / 100, rate } : null;
     const data = {
       desc,
       amountP,
       category: s.category,
       date: s.date,
       payers,
-      split: { mode: s.mode, participants },
+      split,
       attachments: attIds,
       notes: s.notes.trim(),
     };
+    if (existing) {
+      data.repeat = repeat;
+      data.fx = fx;
+      // Turning a copy from an old series into a schedule of its own.
+      if (repeat && !existing.repeat && existing.seriesId && existing.seriesId !== existing.id) data.seriesId = existing.id;
+    } else {
+      if (repeat) data.repeat = repeat;
+      if (fx) data.fx = fx;
+    }
+    if (!existing) rememberCurrency(g, s.cur);
+
+    if (s.saveDefault && split.mode !== "items" && split.mode !== "exact") {
+      await store.setDefaultSplit(g, split);
+    }
 
     if (existing) {
       const changes = [];
       if (existing.amountP !== amountP) changes.push(`amount ${fmt(existing.amountP)} to ${fmt(amountP)}`);
       if (existing.desc !== desc) changes.push(`renamed from ${existing.desc}`);
       if (dayKey(existing.date) !== dayKey(s.date)) changes.push(`date to ${dayLabel(s.date)}`);
-      if (existing.split.participants.length !== participants.length)
-        changes.push(`${existing.split.participants.length} to ${participants.length} people`);
-      if (existing.split.mode !== s.mode) changes.push(`split by ${s.mode}`);
+      if (existing.split.participants.length !== split.participants.length)
+        changes.push(`${existing.split.participants.length} to ${split.participants.length} people`);
+      if (existing.split.mode !== split.mode) changes.push(`split ${MODE_LABEL[split.mode]}`);
+      if ((existing.fx?.currency ?? "INR") !== s.cur) changes.push(`currency to ${s.cur}`);
+      if ((existing.repeat?.freq ?? "none") !== s.repeat) changes.push(repeat ? `repeats ${freqOf(s.repeat).label.toLowerCase()}` : "stopped repeating");
       if ((existing.attachments?.length ?? 0) !== attIds.length) changes.push("proof updated");
       await store.updateExpense(g, existing, data, changes.join(", ") || "details updated");
       closeSheet();
       toast("Saved");
+      if (repeat) postDue();
     } else {
       await store.addExpense(g, data);
+      if (repeat) postDue();
       closeSheet();
-      toast(`${fmt(amountP)} added`);
+      toast(`${fmt(amountP)} added${repeat ? `, repeats ${freqOf(s.repeat).label.toLowerCase()}` : ""}`);
     }
   });
 }
 
 /* ---------- expense detail ---------- */
 
-function expenseDetailSheet(g, e) {
+function commentRow(ev) {
+  return el(`<div class="comment">
+    ${avatarHtml({ name: ev.actor }, "sm")}
+    <div><div class="comment-head"><b>${esc(ev.actor)}</b><span>${dayLabel(ev.ts)}, ${timeLabel(ev.ts)}</span></div>
+      <p>${esc(ev.summary)}</p></div>
+  </div>`);
+}
+
+function expenseDetailSheet(g, e, { onRestore } = {}) {
   const shares = computeShares(e);
   const paidBy = e.payers
     .map((p) => `${displayName(store.memberOf(g, p.memberId))}${e.payers.length > 1 ? " " + fmt(p.amountP) : ""}`)
     .join(", ");
-  const modeLabel = { equal: "equally", exact: "by exact amounts", percent: "by percent", shares: "by shares" }[e.split.mode];
+  const next = e.repeat ? nextDate(e.date, e.repeat) : null;
+  const items = e.split.mode === "items" ? (e.split.items ?? []) : [];
+  const itemsTotal = items.reduce((a, it) => a + it.amountP, 0);
 
   const body = el(`<div>
+    ${e.deleted ? `<div class="status-note deleted">${I.trash}<span><strong>Deleted ${dayPhrase(e.updatedAt ?? e.date)}</strong><small>It counts towards no balance until it's brought back.</small></span></div>` : ""}
     <div class="expense-hero">
-      <div class="expense-hero-top"><span>${catOf(e.category).emoji} ${esc(catOf(e.category).label)}</span><span>${dayLabel(e.date)}</span></div>
+      <div class="expense-hero-top"><span>${catIcon(e.category)}${esc(catOf(e.category).label)}</span><span>${dayLabel(e.date)}</span></div>
       <div class="val money">${heroMoney(e.amountP)}</div>
-      <div class="note">Paid by ${esc(paidBy)}. Split ${modeLabel} between ${e.split.participants.length}.</div>
+      ${e.fx ? `<div class="fx-was">${esc(fmtForeign(e.fx.amount, e.fx.currency))} at ${fmt(Math.round(e.fx.rate * 100))} per ${esc(e.fx.currency)}</div>` : ""}
+      <div class="note">Paid by ${esc(paidBy)}. Split ${MODE_LABEL[e.split.mode] ?? ""} between ${e.split.participants.length}.</div>
       ${e.notes ? `<blockquote>${esc(e.notes)}</blockquote>` : ""}
-      <div class="proof-status ${e.attachments?.length ? "has-proof" : "no-proof"}">${e.attachments?.length ? `${I.clip}<span><strong>Proof attached</strong><small>${e.attachments.length} image${e.attachments.length === 1 ? "" : "s"} kept with this expense</small></span>` : `${I.receipt}<span><strong>No proof attached</strong><small>Add the receipt now or whenever you find it</small></span><button class="btn quiet small detail-add-proof">Add</button>`}</div>
+      ${e.repeat && !e.deleted && next ? `<div class="status-note">${I.repeat}<span><strong>Repeats ${freqOf(e.repeat.freq)?.label.toLowerCase() ?? ""}</strong><small>The next one is added ${dayPhrase(next)}</small></span><button class="btn quiet small detail-stop">Stop</button></div>` : ""}
+      ${e.deleted ? "" : `<div class="proof-status ${e.attachments?.length ? "has-proof" : "no-proof"}">${e.attachments?.length ? `${I.clip}<span><strong>Proof attached</strong><small>${e.attachments.length} image${e.attachments.length === 1 ? "" : "s"} kept with this expense</small></span>` : `${I.receipt}<span><strong>No proof attached</strong><small>Add the receipt now or whenever you find it</small></span><button class="btn quiet small detail-add-proof">Add</button>`}</div>`}
     </div>
+    <div class="x-items"></div>
     <div class="section-cap">Who owes what</div>
     <div class="list x-shares"></div>
     <div class="x-proofwrap"></div>
+    <div class="section-cap">Comments</div>
+    <div class="x-comments"></div>
+    <div class="comment-box">
+      <label class="sr-only" for="x-comment">Add a comment</label>
+      <input class="in" id="x-comment" placeholder="Add a comment" maxlength="${store.LIMITS.comment}" autocomplete="off">
+      <button class="icon-btn comment-send" aria-label="Post comment">${I.send}</button>
+    </div>
     <div class="x-trailwrap"></div>
   </div>`);
+
+  if (items.length) {
+    const wrap = $(".x-items", body);
+    wrap.append(el(`<div class="section-cap">Items</div>`));
+    const list = el(`<div class="list ruled"></div>`);
+    items.forEach((it, i) => {
+      list.append(el(`<div class="row item-line">
+        <span class="grow"><span class="ttl">${esc(it.name || `Item ${i + 1}`)}</span>
+          <span class="cap">${esc(it.memberIds.map((id) => displayName(store.memberOf(g, id))).join(", "))}</span></span>
+        <span class="end"><span class="amt money">${fmt(it.amountP)}</span></span>
+      </div>`));
+    });
+    const extra = e.amountP - itemsTotal;
+    if (extra) {
+      list.append(el(`<div class="row item-line">
+        <span class="grow"><span class="ttl">${extra > 0 ? "Tax, service and tip" : "Discount"}</span><span class="cap">Shared in proportion to the items</span></span>
+        <span class="end"><span class="amt money">${extra > 0 ? "" : "−"}${fmt(Math.abs(extra))}</span></span>
+      </div>`));
+    }
+    wrap.append(list);
+  }
 
   const sl = $(".x-shares", body);
   for (const p of e.split.participants) {
@@ -2182,30 +2850,70 @@ function expenseDetailSheet(g, e) {
     wrap.append(t);
   }
 
-  const evs = store.eventsOf(g.id).filter((ev) => ev.data?.expenseId === e.id);
+  const commentsBox = $(".x-comments", body);
+  const drawComments = () => {
+    const said = store.commentsOf(e.id);
+    commentsBox.replaceChildren(...(said.length ? said.map(commentRow) : [el(`<p class="hint" style="margin-top:0">Ask about it here. Everyone in the group sees comments in the history.</p>`)]));
+  };
+  drawComments();
+  const commentIn = $("#x-comment", body);
+  const send = async () => {
+    const text = commentIn.value.trim();
+    if (!text) return;
+    commentIn.value = "";
+    await store.addComment(g, e, text);
+    drawComments();
+  };
+  $(".comment-send", body).addEventListener("click", send);
+  commentIn.addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter") {
+      ev.preventDefault();
+      send();
+    }
+  });
+
+  const evs = store.eventsOf(g.id).filter((ev) => ev.data?.expenseId === e.id && ev.type !== "comment");
   if (evs.length) {
     const wrap = $(".x-trailwrap", body);
     wrap.append(el(`<div class="section-cap">History</div>`));
-    wrap.append(trailList(evs));
+    wrap.append(trailList(evs, false, false));
   }
 
-  const foot = el(`<div class="btn-row">
-    <button class="btn ghost">${I.pen} Edit</button>
-    <button class="btn danger">${I.trash} Delete</button>
-  </div>`);
+  const foot = e.deleted
+    ? el(`<button class="btn primary">${I.undo} Bring it back</button>`)
+    : el(`<div class="btn-row">
+        <button class="btn ghost">${I.pen} Edit</button>
+        <button class="btn danger">${I.trash} Delete</button>
+      </div>`);
   openSheet({ title: e.desc, body, footer: foot });
+
+  if (e.deleted) {
+    foot.addEventListener("click", async () => {
+      foot.disabled = true;
+      await store.restoreExpense(g, e);
+      closeSheet(false, onRestore);
+      toast(`${e.desc} is back`);
+    });
+    return;
+  }
 
   $(".detail-add-proof", body)?.addEventListener("click", () => {
     closeSheet(false, () => expenseSheet(g, e));
   });
-
+  $(".detail-stop", body)?.addEventListener("click", async (ev) => {
+    ev.currentTarget.disabled = true;
+    await store.stopRepeating(g, e);
+    $(".detail-stop", body)?.closest(".status-note")?.remove();
+    toast("It won't repeat any more");
+  });
   foot.querySelector(".ghost").addEventListener("click", () => {
     closeSheet(false, () => expenseSheet(g, e));
   });
   armDanger(foot.querySelector(".danger"), async () => {
+    const repeating = Boolean(e.repeat);
     await store.deleteExpense(g, e);
     closeSheet();
-    toast("Deleted. It stays in the history.");
+    toast(repeating ? "Deleted, and it stops repeating. Bring it back from the group menu." : "Deleted. Bring it back from the group menu.");
   });
 }
 
@@ -2228,7 +2936,10 @@ function settleSheet(g, fromId, toId, amountP) {
          <div class="hint" style="text-align:center">Opens your UPI app with the amount filled in. Settld does not process the payment.</div>`
       : from?.isYou
         ? `<div class="hint" style="text-align:center">${esc(displayName(to))} has no UPI ID saved. Add one under People, or record the payment after paying another way.</div>`
-        : `<div class="hint" style="text-align:center">Record this only after ${esc(displayName(from))} confirms the payment.</div>`}
+        : to?.isYou
+          ? `<a class="btn ghost" id="se-remind" target="_blank" rel="noopener">${I.send} Remind ${esc(displayName(from))} on WhatsApp</a>
+             <div class="hint" style="text-align:center">Record this only after ${esc(displayName(from))} has paid you.</div>`
+          : `<div class="hint" style="text-align:center">Record this only after ${esc(displayName(from))} confirms the payment.</div>`}
     <label class="cap-label">Payment proof <span class="dim">(screenshot, optional)</span></label>
     <div class="thumbs se-thumbs"></div>
     <input type="file" accept="image/*" multiple hidden class="se-file">
@@ -2238,9 +2949,11 @@ function settleSheet(g, fromId, toId, amountP) {
 
   const amountIn = $(".amount-in", body);
   const upiBtn = $("#se-upi", body);
+  const remindBtn = $("#se-remind", body);
   const setUpi = () => {
-    if (!upiBtn) return;
     const p = toPaise(amountIn.value) || 0;
+    if (remindBtn) remindBtn.href = remindLink(from.name, p, g.emoji === "person" ? "" : g.name);
+    if (!upiBtn) return;
     upiBtn.href = upiLink({ vpa: to.upi, name: to.name, amountP: p, note: `Settld · ${g.name}` });
   };
   setUpi();
@@ -2299,13 +3012,181 @@ function settleSheet(g, fromId, toId, amountP) {
   });
 }
 
+/* ---------- search ---------- */
+
+function searchSheet(scope) {
+  const body = el(`<div>
+    <div class="search-field">
+      ${I.search}
+      <input class="in" type="search" placeholder="${scope ? `Search ${esc(scope.name)}` : "Search every group"}" aria-label="Search expenses" autocomplete="off" enterkeyhint="search">
+    </div>
+    <div class="search-results" role="status" aria-live="polite"></div>
+  </div>`);
+  const input = $("input", body);
+  const results = $(".search-results", body);
+  const clean = (text) => String(text ?? "").toLowerCase().replace(/[₹,]/g, "");
+  const haystack = (e, g) =>
+    clean(
+      [
+        e.desc,
+        e.notes,
+        catOf(e.category).label,
+        g.name,
+        ...e.payers.map((p) => store.memberOf(g, p.memberId)?.name ?? ""),
+        ...(e.split.items ?? []).map((it) => it.name),
+        fromPaise(e.amountP),
+        e.fx ? `${e.fx.currency} ${e.fx.amount}` : "",
+      ].join(" "),
+    );
+  const draw = () => {
+    const words = clean(input.value).split(/\s+/).filter(Boolean);
+    results.replaceChildren();
+    if (!words.length) {
+      results.append(el(`<p class="hint">Search by name, note, person, category, item or amount.</p>`));
+      return;
+    }
+    const hits = store.state.expenses
+      .filter((e) => !scope || e.groupId === scope.id)
+      .map((e) => ({ e, g: store.groupById(e.groupId) }))
+      .filter(({ e, g }) => g && words.every((w) => haystack(e, g).includes(w)))
+      .sort((a, b) => Number(a.e.deleted) - Number(b.e.deleted) || b.e.date - a.e.date);
+    if (!hits.length) {
+      results.append(el(`<p class="hint">Nothing matches “${esc(input.value.trim())}”.</p>`));
+      return;
+    }
+    results.append(el(`<div class="section-cap" style="margin-top:18px">${hits.length} expense${hits.length === 1 ? "" : "s"}</div>`));
+    const list = el(`<div class="list ex-list"></div>`);
+    for (const { e, g } of hits.slice(0, 80)) {
+      const row = el(`<button class="ex-row pressable">
+        <span class="ico">${catIcon(e.category)}</span>
+        <span class="m"><b>${esc(e.desc)}</b><span>${scope ? "" : `${esc(g.name)} · `}${dayLabel(e.date)}${e.deleted ? ` <span class="badge edited">Deleted</span>` : ""}</span></span>
+        <span class="e"><b class="money">${fmt(e.amountP)}</b>${e.fx ? `<span>${esc(fmtForeign(e.fx.amount, e.fx.currency))}</span>` : ""}</span>
+      </button>`);
+      row.addEventListener("click", () => expenseDetailSheet(g, e));
+      list.append(row);
+    }
+    results.append(list);
+  };
+  input.addEventListener("input", draw);
+  draw();
+  openSheet({ title: "Search", body });
+  setTimeout(() => input.focus(), 320);
+}
+
+/* ---------- import from Splitwise ---------- */
+
+function importSheet() {
+  const body = el(`<div>
+    <p class="hint" style="margin-top:4px">Settld reads the spreadsheet Splitwise exports for a group, and the balances come across exactly as they were.</p>
+    <ol class="steps">
+      <li>In Splitwise, open the group and find <b>Export as spreadsheet</b> in its settings.</li>
+      <li>Save the CSV file it gives you.</li>
+      <li>Pick that file here. It's read on this device.</li>
+    </ol>
+    <input type="file" accept=".csv,text/csv,text/comma-separated-values" hidden class="imp-file">
+  </div>`);
+  const fileIn = $(".imp-file", body);
+  const foot = el(`<button class="btn primary">${I.upload} Choose the CSV file</button>`);
+  foot.addEventListener("click", () => fileIn.click());
+  fileIn.addEventListener("change", async () => {
+    const file = fileIn.files?.[0];
+    fileIn.value = "";
+    if (!file) return;
+    let parsed;
+    try {
+      parsed = parseSplitwise(await file.text());
+    } catch (error) {
+      return toast(error?.code === "splitwise/no-people" ? "That export has fewer than two people in it" : "That file isn't a Splitwise export");
+    }
+    if (!parsed.entries.length) return toast("That export has no expenses in it");
+    closeSheet(false, () => importPreviewSheet(parsed, file.name));
+  });
+  openSheet({ title: "Bring a group from Splitwise", body, footer: foot });
+}
+
+function importPreviewSheet(parsed, fileName) {
+  const me = (store.state.profile?.name ?? "").trim().toLowerCase();
+  const first = me.split(/\s+/)[0];
+  let youIndex = parsed.members.findIndex((n) => n.trim().toLowerCase() === me);
+  if (youIndex < 0 && first) youIndex = parsed.members.findIndex((n) => n.trim().toLowerCase().split(/\s+/)[0] === first);
+  const expenses = parsed.entries.filter((x) => !x.payment).length;
+  const payments = parsed.entries.length - expenses;
+  const foreign = [...new Set(parsed.entries.map((x) => x.currency).filter((c) => c !== "INR"))];
+
+  const body = el(`<div>
+    <label class="cap-label" for="ip-name" style="margin-top:4px">Group name</label>
+    <input class="in" id="ip-name" value="${esc(nameFromFile(fileName))}" maxlength="${store.LIMITS.groupName}">
+    <label class="cap-label">Icon</label>
+    <div class="ip-icon"></div>
+    <label class="cap-label">Which one is you?</label>
+    <div class="chips ip-you" role="group" aria-label="Which one is you"></div>
+    <div class="section-cap">What comes across</div>
+    <div class="list ruled">
+      <div class="row"><span class="tile">${I.receipt}</span><span class="grow"><span class="ttl">${expenses} expense${expenses === 1 ? "" : "s"}</span><span class="cap">With who paid and each person's share</span></span></div>
+      <div class="row"><span class="tile">${I.check}</span><span class="grow"><span class="ttl">${payments} payment${payments === 1 ? "" : "s"}</span><span class="cap">Recorded as settled</span></span></div>
+      ${foreign.length ? `<div class="row"><span class="tile">${I.globe}</span><span class="grow"><span class="ttl">${esc(foreign.join(", "))}</span><span class="cap">Converted to rupees at today's rate</span></span></div>` : ""}
+    </div>
+    ${parsed.skipped ? `<div class="hint">${parsed.skipped} row${parsed.skipped === 1 ? "" : "s"} couldn't be read and will be left out.</div>` : ""}
+  </div>`);
+  const icon = iconChips("ledger");
+  $(".ip-icon", body).append(icon);
+  const youBox = $(".ip-you", body);
+  const drawYou = () => {
+    youBox.replaceChildren();
+    parsed.members.forEach((name, i) => {
+      const on = i === youIndex;
+      const chip = el(`<button class="chip ${on ? "on" : ""}" aria-pressed="${on}">${avatarHtml({ name }, "sm")} ${esc(name)}</button>`);
+      chip.addEventListener("click", () => {
+        youIndex = i;
+        drawYou();
+      });
+      youBox.append(chip);
+    });
+  };
+  drawYou();
+
+  const foot = el(`<button class="btn primary">Import the group</button>`);
+  openSheet({ title: "Check the import", body, footer: foot });
+  foot.addEventListener("click", async () => {
+    const name = $("#ip-name", body).value.trim();
+    if (!name) return toast("Give the group a name");
+    if (youIndex < 0) return toast("Pick which one is you");
+    foot.disabled = true;
+    foot.textContent = foreign.length ? "Getting today's rates" : "Importing";
+    const rates = {};
+    for (const code of foreign) rates[code] = (await rateFor(code))?.rate;
+    const result = await store.importGroup({
+      name,
+      icon: icon.querySelector(".on")?.dataset.e ?? "ledger",
+      memberNames: parsed.members,
+      youIndex,
+      source: "Splitwise",
+      build: (ids) => buildImport(parsed, ids, rates),
+    });
+    // With no conversions and nothing skipped, the balances must equal the
+    // export's own "Total balance" row; say so, or say that they don't.
+    let check = "";
+    if (parsed.total && !result.converted && !result.skipped) {
+      const { bal } = groupCalc(result.group);
+      const same = result.memberIds.every((id, i) => (bal.get(id) ?? 0) === parsed.total[i]);
+      check = same ? " Balances match Splitwise." : " Some balances differ from Splitwise; check the group.";
+    } else if (result.skipped) {
+      check = ` ${result.skipped} row${result.skipped === 1 ? " was" : "s were"} left out.`;
+    }
+    closeSheet(false, () => (location.hash = `#/group/${result.group.id}`));
+    toast(`Imported ${result.expenses.length} expenses and ${result.settlements.length} payments.${check}`);
+  });
+}
 /* ---------- boot ---------- */
 
 applyTheme(localStorage.getItem("settld-theme") ?? "dark");
 applyAccent(localStorage.getItem("settld-accent") ?? "coral");
 initDock();
 store.subscribe(render);
-cloud.setOnSynced(() => store.init());
+// Repeating expenses are posted once a sync has pulled what other devices and
+// members already posted, so a month is never added twice.
+const postDue = () => store.postRecurring().catch(() => {});
+cloud.setOnSynced(() => store.init().then(postDue));
 cloud.setOnStatus(() => {
   if (store.state.ready) render();
 });
@@ -2330,6 +3211,7 @@ store.init().then(async () => {
       /* local mode remains fully usable when Firebase cannot load */
     }
   }
+  await postDue();
   if (!store.state.profile) welcomeSheet();
 });
 
@@ -2338,8 +3220,8 @@ store.init().then(async () => {
 // Firestore tier no matter how many groups a person is in.
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState !== "visible") return;
-  if (!cloud.currentUser() || !navigator.onLine) return;
-  cloud.syncSharedGroups().catch(() => {});
+  if (!cloud.currentUser() || !navigator.onLine) return void postDue();
+  cloud.syncSharedGroups().catch(() => {}).then(postDue);
 });
 
 if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {

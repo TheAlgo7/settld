@@ -18,7 +18,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version 0.4" src="https://img.shields.io/badge/version-0.4-FF6F61?style=flat-square&labelColor=111111">
+  <img alt="Version 0.6" src="https://img.shields.io/badge/version-0.6-FF6F61?style=flat-square&labelColor=111111">
   <img alt="Offline-first PWA" src="https://img.shields.io/badge/PWA-offline--first-FF6F61?style=flat-square&labelColor=111111">
   <img alt="Firebase" src="https://img.shields.io/badge/Firebase-free%20tier-FF6F61?style=flat-square&labelColor=111111">
   <img alt="Money in paise" src="https://img.shields.io/badge/money-integer%20paise-FF6F61?style=flat-square&labelColor=111111">
@@ -46,7 +46,19 @@ Settld calculates and records suggested payments; **it does not hold funds, init
 
 ## Features
 
-- Groups, members, and equal, exact, percentage, or shares-based expense splits
+Everything Splitwise keeps for Pro is free here, with no limit on groups, people or expenses.
+
+- Groups, members, and equal, exact, percentage, shares-based or itemised splits (each item shared by whoever had it, tax and service shared in proportion)
+- Repeating expenses: weekly, fortnightly, monthly or yearly, added automatically on the day
+- Foreign currency: type the amount in any of 28 currencies and Settld keeps it in rupees at the day's rate (or yours)
+- Search across every group by name, note, person, category, item or amount
+- Comments on any expense, kept in the group's history
+- Deleted expenses can be brought back
+- A saved default split per group, for couples and flats that never split 50/50
+- Expenses with one person, outside any group
+- Import a group from Splitwise's CSV export, with its balances checked against Splitwise's own total
+- Remind someone on WhatsApp with the amount and your UPI ID
+- Spending charts by category, day or month, and person, for the group or just your share
 - A group as one scrolling screen: your position, who owes whom, then expenses by day
 - Receipt and payment-proof attachments, compressed on-device
 - Recomputed balances and a settle plan of at most `members - 1` transfers
@@ -67,6 +79,7 @@ Local mode stores the ledger and proof in IndexedDB on that device. When a user 
 - Security: records live below `users/{uid}/...`; deployed rules enforce that UID, the allowed collections, document shapes, and proof-size limits
 - Sync: failed writes enter a serialized offline outbox; newer mutable records win, while tombstones keep hard deletions from being resurrected by stale devices
 - Proof: compressed attachments are stored as base64 in Firestore documents so the app does not depend on Firebase Storage
+- Exchange rates: the only other network call is to `open.er-api.com` (free, no key), made only when someone picks a foreign currency. The rates are cached on the device for 12 hours
 
 ### Shared groups
 
@@ -120,11 +133,11 @@ Firestore rule changes are deployed explicitly:
 firebase deploy --only firestore:rules --project settld-in
 ```
 
-The deployed rules pin each document's exact key set, so a new field on any synced record needs a rules deploy before the release that writes it. The v0.4 rules (profile `phone` and `accent`) are live.
+The deployed rules pin each document's exact key set, so a new field on any synced record needs a rules deploy before the release that writes it. The v0.6 rules (`repeat`, `seriesId` and `fx` on expenses, `defaultSplit` on groups) are live.
 
 ### Content Security Policy
 
-`vercel.json` must keep `https://apis.google.com` in `script-src`. Firebase Auth loads `apis.google.com/js/api.js` for its popup and redirect resolver, and without it every Google sign-in fails before a popup opens. This is invisible to local testing because Vercel headers do not apply on `localhost`.
+`vercel.json` must keep `https://apis.google.com` in `script-src`, and `https://open.er-api.com` in `connect-src` for exchange rates. Firebase Auth loads `apis.google.com/js/api.js` for its popup and redirect resolver, and without it every Google sign-in fails before a popup opens. This is invisible to local testing because Vercel headers do not apply on `localhost`.
 
 ## Ledger invariants
 
@@ -142,10 +155,15 @@ js/app.js                  Router, screens, sheets, and rendering
 js/store.js                State, actions, event trail, and sample data
 js/db.js                   IndexedDB persistence
 js/cloud.js                Google auth and per-UID Firestore mirror
-js/money.js                Deterministic currency and split math
+js/money.js                Deterministic currency and split math, itemised bills
 js/settle.js               Balances, transfer plan, and UPI links
+js/recurring.js            Repeating expense dates and occurrence ids
+js/fx.js                   Currencies, exchange rates, and rupee conversion
+js/splitwise.js            Splitwise CSV import
+js/catalog.js              Categories, group icons, and category guessing
+js/icons.js                Lucide line icons
 tests/ledger.test.mjs      Ledger unit tests
-tests/e2e/app.spec.mjs     Playwright product-flow coverage
+tests/e2e/*.spec.mjs       Playwright product-flow coverage
 firestore.rules            Per-UID Firestore access policy
 PRODUCT.md                 Product scope and principles
 scripts/readme-shots.py    README screenshots
@@ -154,7 +172,8 @@ DESIGN.md                  Visual system and component rules
 
 ## Current limits
 
-- INR only
+- Balances settle in rupees; a foreign expense is converted when it is added, not revalued later
+- No push notifications, receipt scanning or Hindi yet
 - Google sign-in only; no phone or Apple sign-in
 - Shared groups sync on foreground, not in realtime, to stay inside the free tier
 - Proof stored in Firestore is subject to the document-size guard in `js/cloud.js`

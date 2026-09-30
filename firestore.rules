@@ -5,6 +5,37 @@ service cloud.firestore {
       return request.auth != null && request.auth.uid == uid;
     }
 
+    // 0.6 fields. Each is optional so older clients keep writing valid records.
+    // repeat: the schedule a repeating expense carries; seriesId ties its
+    // occurrences together; fx: what was typed in a foreign currency.
+    function expenseExtrasOk(d) {
+      return (!('repeat' in d) || d.repeat == null
+          || (d.repeat is map
+            && d.repeat.keys().hasOnly(['freq', 'day'])
+            && d.repeat.freq in ['weekly', 'fortnightly', 'monthly', 'yearly']
+            && (!('day' in d.repeat) || (d.repeat.day is int && d.repeat.day >= 1 && d.repeat.day <= 31))))
+        && (!('seriesId' in d) || d.seriesId == null || (d.seriesId is string && d.seriesId.size() <= 80))
+        && (!('fx' in d) || d.fx == null
+          || (d.fx is map
+            && d.fx.keys().hasOnly(['currency', 'amount', 'rate'])
+            && d.fx.currency is string
+            && d.fx.currency.size() == 3
+            && d.fx.amount is number
+            && d.fx.amount > 0
+            && d.fx.rate is number
+            && d.fx.rate > 0));
+    }
+
+    // The split new expenses in a group start from.
+    function defaultSplitOk(d) {
+      return !('defaultSplit' in d) || d.defaultSplit == null
+        || (d.defaultSplit is map
+          && d.defaultSplit.keys().hasOnly(['mode', 'participants'])
+          && d.defaultSplit.mode in ['equal', 'percent', 'shares']
+          && d.defaultSplit.participants is list
+          && d.defaultSplit.participants.size() <= 100);
+    }
+
     // ---- shared groups ----
     //
     // A group id is an unguessable UUID and the invite link carries it, so the
@@ -24,7 +55,8 @@ service cloud.firestore {
     match /groups/{gid} {
       function shapeOk() {
         return request.resource.data.keys().hasOnly(
-            ['id', 'name', 'emoji', 'currency', 'members', 'memberUids', 'ownerUid', 'createdAt', 'updatedAt'])
+            ['id', 'name', 'emoji', 'currency', 'defaultSplit', 'members', 'memberUids', 'ownerUid', 'createdAt', 'updatedAt'])
+          && defaultSplitOk(request.resource.data)
           && request.resource.data.id == gid
           && request.resource.data.name is string
           && request.resource.data.name.size() <= 160
@@ -70,7 +102,8 @@ service cloud.firestore {
     match /groups/{gid}/expenses/{id} {
       allow read, delete: if memberOfGroup(gid);
       allow create, update: if memberOfGroup(gid)
-        && request.resource.data.keys().hasOnly(['id', 'groupId', 'createdAt', 'updatedAt', 'deleted', 'desc', 'amountP', 'category', 'date', 'payers', 'split', 'attachments', 'notes'])
+        && request.resource.data.keys().hasOnly(['id', 'groupId', 'createdAt', 'updatedAt', 'deleted', 'desc', 'amountP', 'category', 'date', 'payers', 'split', 'attachments', 'notes', 'repeat', 'seriesId', 'fx'])
+        && expenseExtrasOk(request.resource.data)
         && request.resource.data.id == id
         && request.resource.data.groupId == gid
         && request.resource.data.desc is string
@@ -131,7 +164,8 @@ service cloud.firestore {
     match /users/{uid}/groups/{id} {
       allow read, delete: if owns(uid);
       allow create, update: if owns(uid)
-        && request.resource.data.keys().hasOnly(['id', 'name', 'emoji', 'currency', 'members', 'createdAt', 'updatedAt'])
+        && request.resource.data.keys().hasOnly(['id', 'name', 'emoji', 'currency', 'defaultSplit', 'members', 'createdAt', 'updatedAt'])
+        && defaultSplitOk(request.resource.data)
         && request.resource.data.id == id
         && request.resource.data.name is string
         && request.resource.data.name.size() <= 160
@@ -144,7 +178,8 @@ service cloud.firestore {
     match /users/{uid}/expenses/{id} {
       allow read, delete: if owns(uid);
       allow create, update: if owns(uid)
-        && request.resource.data.keys().hasOnly(['id', 'groupId', 'createdAt', 'updatedAt', 'deleted', 'desc', 'amountP', 'category', 'date', 'payers', 'split', 'attachments', 'notes'])
+        && request.resource.data.keys().hasOnly(['id', 'groupId', 'createdAt', 'updatedAt', 'deleted', 'desc', 'amountP', 'category', 'date', 'payers', 'split', 'attachments', 'notes', 'repeat', 'seriesId', 'fx'])
+        && expenseExtrasOk(request.resource.data)
         && request.resource.data.id == id
         && request.resource.data.desc is string
         && request.resource.data.desc.size() <= 300

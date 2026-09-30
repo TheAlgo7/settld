@@ -5,6 +5,10 @@ import { distribute, computeShares, toPaise, fromPaise } from "../js/money.js";
 import { computeBalances, simplify, upiLink } from "../js/settle.js";
 import { mergeDirection } from "../js/cloud.js";
 import { LIMITS, normalizeProfile, normalizeStoredRecord } from "../js/store.js";
+import { makeRepeat, nextDate, dueDates, occurrenceId } from "../js/recurring.js";
+import { guessCategory, groupIconId } from "../js/catalog.js";
+import { spreadInr, toInrPaise } from "../js/fx.js";
+import { parseSplitwise, buildImport, nameFromFile } from "../js/splitwise.js";
 
 let passed = 0;
 function t(name, fn) {
@@ -200,6 +204,199 @@ t("upi link formats amount in rupees", () => {
   assert.ok(link.startsWith("upi://pay?"));
   assert.ok(link.includes("am=1840.50"));
   assert.ok(link.includes("pa=gaurav%40upi"));
+});
+
+/* ---------- 0.6 ---------- */
+
+t("itemised bill: each item split by who had it, tax shared in proportion", () => {
+  // Paneer 600 (a, b), beer 400 (b), naan 200 (a, b, c); bill 1380 with 15% extra.
+  const e = {
+    amountP: 138000,
+    split: {
+      mode: "items",
+      participants: [{ memberId: "a" }, { memberId: "b" }, { memberId: "c" }],
+      items: [
+        { name: "Paneer", amountP: 60000, memberIds: ["a", "b"] },
+        { name: "Beer", amountP: 40000, memberIds: ["b"] },
+        { name: "Naan", amountP: 20000, memberIds: ["a", "b", "c"] },
+      ],
+    },
+  };
+  const s = computeShares(e);
+  const total = [...s.values()].reduce((x, y) => x + y, 0);
+  assert.equal(total, 138000);
+  // Subtotals: a 36667, b 76667, c 6666 (paise, largest remainder), then x1.15.
+  assert.ok(Math.abs(s.get("a") - 42167) <= 1);
+  assert.ok(Math.abs(s.get("b") - 88167) <= 1);
+  assert.ok(Math.abs(s.get("c") - 7667) <= 1);
+});
+
+t("itemised bill without extras keeps item shares exact", () => {
+  const s = computeShares({
+    amountP: 90000,
+    split: {
+      mode: "items",
+      participants: [{ memberId: "a" }, { memberId: "b" }],
+      items: [
+        { name: "Pizza", amountP: 60000, memberIds: ["a", "b"] },
+        { name: "Soda", amountP: 30000, memberIds: ["a"] },
+      ],
+    },
+  });
+  assert.equal(s.get("a"), 60000);
+  assert.equal(s.get("b"), 30000);
+});
+
+t("itemised bill with a discount shares the saving in proportion", () => {
+  const s = computeShares({
+    amountP: 80000,
+    split: {
+      mode: "items",
+      participants: [{ memberId: "a" }, { memberId: "b" }],
+      items: [
+        { name: "Shirt", amountP: 75000, memberIds: ["a"] },
+        { name: "Socks", amountP: 25000, memberIds: ["b"] },
+      ],
+    },
+  });
+  assert.equal(s.get("a"), 60000);
+  assert.equal(s.get("b"), 20000);
+});
+
+t("an item nobody had makes the expense invalid rather than lost", () => {
+  const e = {
+    amountP: 1000,
+    payers: [{ memberId: "a", amountP: 1000 }],
+    split: { mode: "items", participants: [{ memberId: "a" }], items: [{ name: "x", amountP: 1000, memberIds: [] }] },
+  };
+  assert.equal(computeShares(e).size, 0);
+  const bal = computeBalances(["a"], [e], []);
+  assert.equal(bal.get("a"), 0);
+});
+
+t("monthly repeats keep their day, clamped to short months", () => {
+  const r = makeRepeat("monthly", new Date(2026, 0, 31, 12).getTime());
+  assert.deepEqual(r, { freq: "monthly", day: 31 });
+  const feb = nextDate(new Date(2026, 0, 31, 12).getTime(), r);
+  assert.equal(new Date(feb).getDate(), 28);
+  assert.equal(new Date(feb).getMonth(), 1);
+  const mar = nextDate(feb, r);
+  assert.equal(new Date(mar).getDate(), 31);
+  const dec = nextDate(new Date(2026, 11, 15, 12).getTime(), { freq: "monthly", day: 15 });
+  assert.equal(new Date(dec).getFullYear(), 2027);
+  assert.equal(new Date(dec).getMonth(), 0);
+});
+
+t("weekly, fortnightly and yearly repeats", () => {
+  const start = new Date(2026, 8, 28, 12).getTime();
+  assert.equal(new Date(nextDate(start, { freq: "weekly" })).getDate(), 5);
+  assert.equal(new Date(nextDate(start, { freq: "fortnightly" })).getDate(), 12);
+  const leap = new Date(2028, 1, 29, 12).getTime();
+  const r = makeRepeat("yearly", leap);
+  const y1 = nextDate(leap, r);
+  assert.equal(new Date(y1).getDate(), 28);
+  const y4 = nextDate(nextDate(nextDate(y1, r), r), r);
+  assert.equal(new Date(y4).getFullYear(), 2032);
+  assert.equal(new Date(y4).getDate(), 29);
+});
+
+t("due dates catch up to today and never run away", () => {
+  const head = { date: new Date(2026, 5, 1, 12).getTime(), repeat: { freq: "monthly", day: 1 } };
+  const due = dueDates(head, new Date(2026, 8, 30, 9).getTime());
+  assert.deepEqual(due.map((ts) => new Date(ts).getMonth()), [6, 7, 8]);
+  assert.equal(dueDates({ ...head, repeat: { freq: "weekly" } }, new Date(2031, 0, 1).getTime()).length, 60);
+  assert.equal(dueDates({ date: head.date, repeat: null }, Date.now()).length, 0);
+  assert.equal(occurrenceId("abc", new Date(2026, 9, 1, 12).getTime()), "abc_20261001");
+});
+
+t("category is read from what people type", () => {
+  assert.equal(guessCategory("Uber to airport"), "travel");
+  assert.equal(guessCategory("Cab to the hotel"), "travel");
+  assert.equal(guessCategory("Dinner at the hotel"), "food");
+  assert.equal(guessCategory("Hotel, two nights"), "stay");
+  assert.equal(guessCategory("Blinkit order"), "groceries");
+  assert.equal(guessCategory("Movie tickets"), "fun");
+  assert.equal(guessCategory("Fort Aguada tickets"), "tickets");
+  assert.equal(guessCategory("Flat rent October"), "rent");
+  assert.equal(guessCategory("Petrol"), "fuel");
+  assert.equal(guessCategory("Jio recharge"), "bills");
+  assert.equal(guessCategory("Daaru"), "drinks");
+  assert.equal(guessCategory("Something"), null);
+});
+
+t("old emoji group icons map to line icons", () => {
+  assert.equal(groupIconId("🏝️"), "trip");
+  assert.equal(groupIconId("🏠"), "home");
+  assert.equal(groupIconId("🧾"), "ledger");
+  assert.equal(groupIconId("party"), "party");
+  assert.equal(groupIconId(undefined), "ledger");
+  assert.equal(groupIconId("🦄"), "ledger");
+});
+
+t("foreign parts spread to rupees that add up exactly", () => {
+  const totalP = toInrPaise(4550, 83.4217); // $45.50
+  assert.equal(totalP, 379569);
+  const parts = spreadInr(totalP, [1517, 1517, 1516]);
+  assert.equal(parts.reduce((a, b) => a + b, 0), totalP);
+  assert.ok(Math.max(...parts) - Math.min(...parts) <= 84);
+});
+
+const SPLITWISE_CSV = [
+  "Date,Description,Category,Cost,Currency,Aarav,Isha,Dev",
+  "",
+  "2026-03-01,Hotel,Hotel,4800.00,INR,3200.00,-1600.00,-1600.00",
+  '2026-03-01,"Dinner, beach shack",Dining out,1500.00,INR,-500.00,1000.00,-500.00',
+  "2026-03-02,Two payers,General,900.00,INR,300.00,300.00,-600.00",
+  "2026-03-03,Isha paid Aarav,Payment,500.00,INR,-500.00,500.00,0.00",
+  "2026-03-03,Cab,Taxi,30.00,USD,20.00,-10.00,-10.00",
+  "",
+  "2026-03-09,Total balance, , ,INR,2500.00,200.00,-2700.00",
+].join("\r\n");
+
+t("Splitwise export parses, with quoted descriptions and the total row", () => {
+  const parsed = parseSplitwise(SPLITWISE_CSV);
+  assert.deepEqual(parsed.members, ["Aarav", "Isha", "Dev"]);
+  assert.equal(parsed.entries.length, 5);
+  assert.equal(parsed.entries[1].desc, "Dinner, beach shack");
+  assert.equal(parsed.entries[3].payment, true);
+  assert.deepEqual(parsed.total, [250000, 20000, -270000]);
+  assert.throws(() => parseSplitwise("a,b,c\n1,2,3"), /Splitwise/);
+});
+
+t("Splitwise rows rebuild into expenses with the same balances", () => {
+  const parsed = parseSplitwise(SPLITWISE_CSV);
+  const ids = ["m1", "m2", "m3"];
+  const out = buildImport(parsed, ids, { USD: 83.5 });
+  assert.equal(out.expenses.length, 4);
+  assert.equal(out.settlements.length, 1);
+  assert.equal(out.converted, 1);
+  assert.equal(out.skipped, 0);
+  assert.deepEqual(out.settlements[0], { fromId: "m2", toId: "m1", amountP: 50000, date: parsed.entries[3].date });
+  const inr = out.expenses.filter((e) => !e.fx);
+  const bal = computeBalances(ids, inr, out.settlements);
+  // Rupee rows only: 3200-500+300-500 for Aarav, and so on.
+  assert.equal(bal.get("m1"), 250000);
+  assert.equal(bal.get("m2"), 20000);
+  assert.equal(bal.get("m3"), -270000);
+  const two = out.expenses[2];
+  assert.equal(two.payers.reduce((a, p) => a + p.amountP, 0), 90000);
+  assert.equal(two.category, "other");
+  assert.equal(out.expenses[0].category, "stay");
+  assert.equal(out.expenses[1].category, "food");
+  const cab = out.expenses[3];
+  assert.equal(cab.amountP, 250500);
+  assert.deepEqual(cab.fx, { currency: "USD", amount: 30, rate: 83.5 });
+  assert.equal(computeBalances(ids, [cab], []).get("m1"), 167000);
+  for (const e of out.expenses) {
+    assert.equal([...computeShares(e).values()].reduce((a, b) => a + b, 0), e.amountP);
+  }
+});
+
+t("Splitwise rows in a currency with no rate are left out, not guessed", () => {
+  const out = buildImport(parseSplitwise(SPLITWISE_CSV), ["m1", "m2", "m3"], {});
+  assert.equal(out.expenses.length, 3);
+  assert.equal(out.skipped, 1);
+  assert.equal(nameFromFile("goa-trip_2026-03-09_export.csv"), "Goa trip");
 });
 
 console.log(`\n${passed} tests passed`);

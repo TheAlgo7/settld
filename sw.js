@@ -1,7 +1,7 @@
 // Settld service worker: precache the shell, stale-while-revalidate for
 // same-origin requests. Bump VERSION on every deploy.
 
-const VERSION = "settld-v0.5.4";
+const VERSION = "settld-v0.6.0";
 const ASSETS = [
   "./",
   "./index.html",
@@ -14,6 +14,11 @@ const ASSETS = [
   "./js/cloud.js",
   "./js/firebase-config.js",
   "./js/glass.js",
+  "./js/icons.js",
+  "./js/catalog.js",
+  "./js/recurring.js",
+  "./js/fx.js",
+  "./js/splitwise.js",
   "./manifest.webmanifest",
   "./icons/icon.svg",
   "./icons/maskable.svg",

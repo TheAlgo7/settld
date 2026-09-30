@@ -62,7 +62,7 @@ test("a group reads as one screen: position, who owes whom, then expenses", asyn
   await expect(page.getByRole("button", { name: /Hotel, two nights/ })).toBeVisible();
 
   await page.getByRole("button", { name: "Add expense" }).click();
-  await expect(page.getByLabel("Amount in rupees")).toBeFocused();
+  await expect(page.getByLabel("Amount in Indian rupee")).toBeFocused();
   await expect(page.locator("details.expense-more")).not.toHaveAttribute("open", "");
   await page.locator("details.expense-more summary").click();
   await expect(page.getByRole("tab", { name: "Equally", selected: true })).toBeVisible();
@@ -90,12 +90,15 @@ test("a group reads as one screen: position, who owes whom, then expenses", asyn
   await expect(page.getByText("3 transfers clear every current balance", { exact: false })).toBeVisible();
   await page.getByRole("button", { name: "Record" }).first().click();
   await expect(page.getByRole("heading", { name: "Record payment" })).toBeVisible();
-  await expect(page.getByText(/Record this only after .* confirms the payment/)).toBeVisible();
+  // The first suggested transfer is money coming to you: record it once it
+  // arrives, and a WhatsApp reminder is one tap away.
+  await expect(page.getByText(/Record this only after .* has paid you/)).toBeVisible();
+  await expect(page.getByRole("link", { name: /on WhatsApp/ })).toHaveAttribute("href", /^https:\/\/wa\.me\//);
   await page.getByRole("button", { name: "Close" }).click();
 
   // Summary and history moved behind the group menu.
   await page.getByRole("button", { name: "Group menu" }).click();
-  await page.getByRole("button", { name: /Trip summary/ }).click();
+  await page.getByRole("button", { name: /^Summary/ }).click();
   await expect(page.getByRole("img", { name: "Group spend by category" })).toBeVisible();
   await page.getByRole("button", { name: "Close" }).click();
 

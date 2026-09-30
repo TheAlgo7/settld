@@ -5,6 +5,7 @@
 
 import { db } from "./db.js";
 import { fmt } from "./money.js";
+import { dueDates, freqOf, occurrenceId } from "./recurring.js";
 
 export const LIMITS = Object.freeze({
   profileName: 120,
@@ -19,6 +20,7 @@ export const LIMITS = Object.freeze({
   attachments: 20,
   attachmentName: 300,
   eventSummary: 1000,
+  comment: 1000,
 });
 
 const limited = (value, max, trim = true) => {
@@ -158,6 +160,10 @@ export const settlementsOf = (gid) =>
 export const eventsOf = (gid) =>
   state.events.filter((e) => e.groupId === gid).sort((a, b) => b.ts - a.ts);
 export const allEvents = () => [...state.events].sort((a, b) => b.ts - a.ts);
+export const deletedOf = (gid) =>
+  state.expenses.filter((e) => e.groupId === gid && e.deleted).sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
+export const commentsOf = (expenseId) =>
+  state.events.filter((ev) => ev.type === "comment" && ev.data?.expenseId === expenseId).sort((a, b) => a.ts - b.ts);
 export const memberOf = (group, id) => group.members.find((m) => m.id === id);
 export const youOf = (group) => group.members.find((m) => m.isYou);
 export const isShared = (group) => Boolean(group?.shared);
@@ -183,9 +189,9 @@ async function touchGroup(group) {
   state.groups.sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
-async function logEvent(groupId, type, summary, data = {}) {
+async function logEvent(groupId, type, summary, data = {}, id = uid()) {
   const ev = {
-    id: uid(),
+    id,
     groupId,
     ts: Date.now(),
     actor: limited(state.profile?.name ?? "You", LIMITS.profileName),
@@ -380,6 +386,7 @@ export async function addExpense(group, data) {
     attachments: limitedAttachments(data.attachments),
   };
   const e = { id: uid(), groupId: group.id, createdAt: now, updatedAt: now, deleted: false, ...safeData };
+  if (e.repeat && !e.seriesId) e.seriesId = e.id;
   await db.put("expenses", e);
   state.expenses.push(e);
   await logEvent(
@@ -400,6 +407,7 @@ export async function updateExpense(group, expense, patch, changeSummary) {
   if ("notes" in safePatch) safePatch.notes = limited(safePatch.notes, LIMITS.expenseNotes, false);
   if ("attachments" in safePatch) safePatch.attachments = limitedAttachments(safePatch.attachments);
   Object.assign(expense, safePatch, { updatedAt: Date.now() });
+  if (expense.repeat && !expense.seriesId) expense.seriesId = expense.id;
   await db.put("expenses", expense);
   const stillUsed = new Set([
     ...state.expenses.flatMap((item) => item.attachments ?? []),
@@ -422,6 +430,198 @@ export async function deleteExpense(group, expense) {
   });
   await touchGroup(group);
   emit();
+}
+
+export async function restoreExpense(group, expense) {
+  if (!expense.deleted) return;
+  expense.deleted = false;
+  expense.updatedAt = Date.now();
+  await db.put("expenses", expense);
+  await logEvent(group.id, "restore", `${expense.desc} (${fmt(expense.amountP)}) was restored`, {
+    expenseId: expense.id,
+  });
+  await touchGroup(group);
+  emit();
+}
+
+// Comments live in the group's append-only history, so they sync and share
+// exactly like every other entry and can never be quietly rewritten.
+export async function addComment(group, expense, text) {
+  const body = limited(text, LIMITS.comment);
+  if (!body) return null;
+  const ev = await logEvent(group.id, "comment", body, { expenseId: expense.id });
+  await touchGroup(group);
+  emit();
+  return ev;
+}
+
+export async function stopRepeating(group, expense) {
+  if (!expense.repeat) return;
+  const label = freqOf(expense.repeat.freq)?.label.toLowerCase() ?? "";
+  expense.repeat = null;
+  expense.updatedAt = Date.now();
+  await db.put("expenses", expense);
+  await logEvent(group.id, "edit", `${expense.desc} stopped repeating ${label}`.trim(), { expenseId: expense.id });
+  await touchGroup(group);
+  emit();
+}
+
+// Posts every repeating expense whose next date has arrived. Runs at start,
+// after a sync and when the app comes back to the foreground; a second call
+// while one is running waits for it instead of posting twice.
+let posting = null;
+export function postRecurring(now = Date.now()) {
+  if (!posting) posting = runRecurring(now).finally(() => (posting = null));
+  return posting;
+}
+
+async function runRecurring(now) {
+  let changed = false;
+  for (const head of state.expenses.filter((e) => e.repeat && !e.deleted)) {
+    const group = groupById(head.groupId);
+    const dates = group ? dueDates(head, now) : [];
+    if (!dates.length) continue;
+    const seriesId = head.seriesId ?? head.id;
+    const label = freqOf(head.repeat.freq)?.label.toLowerCase() ?? "";
+    let latest = head;
+    for (const ts of dates) {
+      const id = occurrenceId(seriesId, ts);
+      let occ = state.expenses.find((e) => e.id === id);
+      if (!occ) {
+        const stamp = Date.now();
+        occ = {
+          id,
+          groupId: head.groupId,
+          createdAt: stamp,
+          updatedAt: stamp,
+          deleted: false,
+          desc: latest.desc,
+          amountP: latest.amountP,
+          category: latest.category,
+          date: ts,
+          payers: structuredClone(latest.payers),
+          split: structuredClone(latest.split),
+          attachments: [],
+          notes: latest.notes ?? "",
+          seriesId,
+          repeat: null,
+        };
+        if (latest.fx) occ.fx = { ...latest.fx };
+        await db.put("expenses", occ);
+        state.expenses.push(occ);
+        await logEvent(group.id, "expense", `${occ.desc} (${fmt(occ.amountP)}) added, repeats ${label}`, { expenseId: id }, `${id}_added`);
+      }
+      latest = occ;
+    }
+    if (latest !== head) {
+      const stamp = Date.now();
+      if (!latest.repeat) {
+        latest.repeat = { ...head.repeat };
+        latest.updatedAt = stamp;
+        await db.put("expenses", latest);
+      }
+      head.repeat = null;
+      head.updatedAt = stamp;
+      await db.put("expenses", head);
+      await touchGroup(group);
+      changed = true;
+    }
+  }
+  if (changed) emit();
+  return changed;
+}
+
+// The split new expenses in this group start from. Only splits that still
+// make sense for a different amount are kept: equal, percent and shares.
+export async function setDefaultSplit(group, split) {
+  if (split) {
+    group.defaultSplit = {
+      mode: split.mode,
+      participants: split.participants.map((p) =>
+        split.mode === "equal" ? { memberId: p.memberId } : { memberId: p.memberId, value: p.value },
+      ),
+    };
+  } else {
+    delete group.defaultSplit;
+  }
+  await touchGroup(group);
+  await logEvent(group.id, "group", split ? "New expenses now start from a saved split" : "New expenses split equally again");
+  emit();
+}
+
+// A one-to-one ledger with a single person, the way Splitwise keeps expenses
+// outside any group: a two-person group named after them.
+export async function friendGroup(name) {
+  const clean = limited(name, LIMITS.memberName);
+  const key = clean.toLowerCase();
+  const existing = state.groups.find(
+    (g) =>
+      g.emoji === "person" &&
+      g.members.length === 2 &&
+      g.members.some((m) => m.isYou) &&
+      g.members.some((m) => !m.isYou && m.name.trim().toLowerCase() === key),
+  );
+  return existing ?? createGroup({ name: clean, emoji: "person", memberNames: [clean] });
+}
+
+// Creates a whole group from an import in one go: one history entry for the
+// import instead of one per row. `build(memberIds)` returns the records, with
+// member ids in the same order as `memberNames`.
+export async function importGroup({ name, icon, memberNames, youIndex, build, source }) {
+  const now = Date.now();
+  const members = memberNames.map((n, i) =>
+    i === youIndex
+      ? { id: uid(), name: limited(state.profile?.name || n, LIMITS.memberName), upi: limited(state.profile?.upi ?? "", LIMITS.upi), isYou: true }
+      : { id: uid(), name: limited(n, LIMITS.memberName), upi: "" },
+  );
+  const result = build(members.map((m) => m.id));
+  const you = members[youIndex];
+  const group = {
+    id: uid(),
+    name: limited(name, LIMITS.groupName),
+    emoji: icon,
+    currency: "INR",
+    members: [you, ...members.filter((m) => m !== you)],
+    createdAt: now,
+    updatedAt: now,
+  };
+  await db.put("groups", group);
+  state.groups.unshift(group);
+  for (const data of result.expenses) {
+    const e = {
+      id: uid(),
+      groupId: group.id,
+      createdAt: now,
+      updatedAt: now,
+      deleted: false,
+      ...data,
+      desc: limited(data.desc, LIMITS.expenseDesc),
+      notes: limited(data.notes, LIMITS.expenseNotes, false),
+      attachments: [],
+    };
+    await db.put("expenses", e);
+    state.expenses.push(e);
+  }
+  for (const data of result.settlements) {
+    const s = {
+      id: uid(),
+      groupId: group.id,
+      fromId: data.fromId,
+      toId: data.toId,
+      amountP: data.amountP,
+      note: `Imported from ${source}`,
+      attachments: [],
+      createdAt: data.date ?? now,
+      deleted: false,
+    };
+    await db.put("settlements", s);
+    state.settlements.push(s);
+  }
+  const n = result.expenses.length;
+  const m = result.settlements.length;
+  await logEvent(group.id, "group", `Imported from ${source}: ${n} expense${n === 1 ? "" : "s"} and ${m} payment${m === 1 ? "" : "s"}`);
+  emit();
+  return { group, memberIds: members.map((m) => m.id), ...result };
 }
 
 export async function addSettlement(group, { fromId, toId, amountP, note, attachments }) {
@@ -510,7 +710,7 @@ function receiptBlob(lines) {
 export async function seedDemo() {
   const g = await createGroup({
     name: "Goa trip",
-    emoji: "🏝️",
+    emoji: "trip",
     memberNames: ["Aisha", "Rohan", "Kabir"],
   });
   const [you, aisha, rohan, kabir] = g.members;

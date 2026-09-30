@@ -4,6 +4,8 @@
 
 Since 0.5 (September 2026) Settld shares Dueline's design family: the same warm near-black surfaces, Inter type scale, rows led by 42px glyph tiles, pill buttons, bottom sheets, dark toasts, and a liquid-glass dock with one solid action beside it. Settld keeps its own mark, its coral default and the accent choices, and its light theme.
 
+Since 0.6 every tile draws a Lucide line icon, the same set Dueline uses (`js/icons.js`, generated from lucide-react, ISC). There are no emoji anywhere in the interface: categories, group icons, the icon picker and the summary legend all use line icons in a neutral tile (`--raised` fill, `--text-2` stroke). Colour stays for meaning (accent for action and selection, green for money coming to you), so category tiles are not tinted. Old groups saved with an emoji keep working: `groupIconId()` maps each old emoji to its line icon.
+
 Settld is a calm, proof-first ledger for trips and small groups. It should feel precise enough to trust with money and relaxed enough to use at a crowded dinner table. The visual identity comes from the coral Settld loop/check mark, warm paper text, restrained surfaces, and traceable records. Decoration never competes with the amount, payer, proof, or current settlement state.
 
 Physical scene: a friend adds a restaurant bill one-handed at 10pm, then another member checks the receipt outdoors the next morning. Dark is the signature theme, but light mode is a complete high-ambient-light theme.
@@ -133,9 +135,22 @@ Proof is optional during quick entry and prominent afterward. Thumbnails use a r
 
 The panel says exactly what Settld calculates: a simple plan that clears current balances in at most one fewer transfer than the number of members. Actions use `Pay via UPI` when a deep link is available, then `Mark as paid` and `Attach proof`. Settld never implies that it processes or holds money.
 
-### Trip summary
+### Summary and charts
 
-Trip spend, personal contribution, current balance, and settlement progress are separate metrics. A category chart may divide total spend. Do not combine paid, owed, receivable, and settled values in one donut because they are not parts of one total.
+Spend, personal contribution, current balance, and settlement progress are separate metrics. A category chart may divide total spend. Do not combine paid, owed, receivable, and settled values in one donut because they are not parts of one total.
+
+- A segmented control switches every chart between the whole group and your own share.
+- The donut shows the six largest categories in chart colours; anything beyond is grouped. Its centre shows whole rupees, and lakhs past ₹1,00,000, so it never spills out of the ring.
+- Spend over time is a bar per day for anything up to a month, a bar per month beyond that. The highest bar takes the solid accent and is named in the line below.
+- "Who paid, and whose share it was" is one track per person: the bar is what they paid, the tick is their share, on the same scale.
+
+### Expense entry additions (0.6)
+
+- The currency symbol beside the amount is the button that changes currency. A foreign currency shows its code on an accent tile, and one line below gives the rupee value and the rate, with "Change rate" to type another.
+- The description field is led by the category tile it was read as, which updates as the words are typed and opens the category list.
+- Items is the fifth split method: one row per item (name, amount, who had it), with the tax, service or discount explained in a line under the list.
+- Repeats sits with the other details as chips (Never, Weekly, Fortnightly, Monthly, Yearly), with the next date spelled out.
+- "Use this split for new expenses" is a plain checkbox under the split, shown only when there is something worth saving.
 
 ## Motion
 
@@ -144,7 +159,7 @@ Trip spend, personal contribution, current balance, and settlement progress are 
 - Route change: 180ms fade plus 6px rise.
 - Press feedback: scale to 0.98.
 - No bounce, decorative choreography, or layout-property animation.
-- Reduced motion removes travel and scale while preserving state visibility.
+- Motion stays on for everyone. There is deliberately no reduced-motion override: the movement is short and small, and switching it all off made the app feel broken to the people who asked for it.
 
 ## Voice
 

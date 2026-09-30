@@ -13,6 +13,8 @@ const SAME_SITE_AUTH_DEFAULT = false;
 const APP_HOST = "settld-ruddy.vercel.app";
 
 function sameSiteAuth() {
+  // Outside a browser (the Node ledger tests import this through cloud.js).
+  if (typeof location === "undefined") return false;
   if (location.hostname !== APP_HOST) return false;
   try {
     const flag = localStorage.getItem("settld.sameSiteAuth");

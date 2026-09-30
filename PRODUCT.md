@@ -8,6 +8,8 @@ Settld is a shared-expense app for trips, roommates, couples and small groups. C
 
 The wedge use case is group trips (many expenses in a few days, mixed payers, cash + UPI, receipts scattered across WhatsApp). The differentiator is not "free Splitwise": it is evidence and accountability. Every expense can carry proof, every edit is visible, nobody argues about who changed what.
 
+It still has to match Splitwise, or nobody moves. Since 0.6 everything Splitwise locks behind Pro is free here: repeating expenses, itemised bills, foreign currency with the day's rate, search, spending charts, comments, restoring deleted expenses, a saved default split, one-to-one expenses outside groups, and an import that brings a whole Splitwise group across with its balances intact. Still to come: push notifications, receipt scanning, and Hindi.
+
 ## Users
 - Indian friend groups on trips (primary wedge). Phone-first, WhatsApp-native, UPI for everything.
 - Roommates and couples tracking recurring shared costs.

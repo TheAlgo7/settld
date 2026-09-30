@@ -258,8 +258,9 @@ function groupToDoc(group) {
   return {
     id: group.id,
     name: group.name,
-    emoji: group.emoji ?? "🧾",
+    emoji: group.emoji ?? "ledger",
     currency: group.currency ?? "INR",
+    defaultSplit: group.defaultSplit ?? null,
     members: shareableMembers(group.members),
     memberUids: [...new Set(group.memberUids ?? [])],
     ownerUid: group.ownerUid,

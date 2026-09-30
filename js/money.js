@@ -62,13 +62,31 @@ export function distribute(totalP, weights) {
   return out;
 }
 
-// expense.split = { mode: "equal"|"exact"|"percent"|"shares",
-//   participants: [{ memberId, value?, valueP? }] }
+// An itemised bill: each item is shared equally by the people who had it, and
+// whatever the bill adds on top of the items (tax, service, tip) or takes off
+// (a discount) is shared in proportion to what each person had.
+// items = [{ name, amountP, memberIds }]
+function itemShares(amountP, items) {
+  if (!Array.isArray(items) || !items.length) return null;
+  const subtotal = new Map();
+  for (const item of items) {
+    const ids = [...new Set(item?.memberIds ?? [])];
+    if (!Number.isInteger(item?.amountP) || item.amountP < 0 || !ids.length) return null;
+    const each = distribute(item.amountP, ids.map((id) => ({ id, w: 1 })));
+    if (!each) return null;
+    for (const [id, v] of each) subtotal.set(id, (subtotal.get(id) ?? 0) + v);
+  }
+  return distribute(amountP, [...subtotal].map(([id, w]) => ({ id, w })));
+}
+
+// expense.split = { mode: "equal"|"exact"|"percent"|"shares"|"items",
+//   participants: [{ memberId, value?, valueP? }], items? }
 // Returns Map memberId -> share in paise.
 export function computeShares(expense) {
   const parts = expense?.split?.participants ?? [];
   if (!parts.length) return new Map();
   const mode = expense.split.mode;
+  if (mode === "items") return itemShares(expense.amountP, expense.split.items) ?? new Map();
   if (mode === "exact") {
     const rows = parts.map((p) => [p.memberId, Number(p.valueP)]);
     if (rows.some(([, value]) => !Number.isInteger(value) || value < 0)) return new Map();
