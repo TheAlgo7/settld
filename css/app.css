@@ -3015,3 +3015,15 @@ button.trail-row {
 .sfoot .btn-row .btn {
   padding: 0 14px;
 }
+
+/* 360px phones: the two group actions stay on one line each. */
+.act-row .btn {
+  white-space: nowrap;
+}
+
+@media (max-width: 380px) {
+  .act-row .btn {
+    padding: 0 12px;
+    font-size: 15px;
+  }
+}

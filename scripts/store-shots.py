@@ -21,6 +21,9 @@ with sync_playwright() as p:
     # 360x640 CSS pixels at 3x = 1080x1920.
     ctx = b.new_context(viewport={'width': 360, 'height': 640}, device_scale_factor=3, user_agent=UA, is_mobile=True, has_touch=True)
     page = ctx.new_page()
+    # A fixed rate, so the currency screenshot never depends on the day.
+    page.route('https://open.er-api.com/**', lambda route: route.fulfill(
+        json={'result': 'success', 'rates': {'INR': 1, 'THB': 0.39}}))
     page.goto(BASE)
     page.get_by_role('button', name='Continue on this device').click()
     page.get_by_label('Your name').fill('Aarav')
@@ -31,7 +34,7 @@ with sync_playwright() as p:
     page.screenshot(path=str(OUT / '1-group.png'))
 
     page.get_by_role('button', name='Add expense').click()
-    page.get_by_label('Amount in rupees').fill('1860')
+    page.get_by_label('Amount in Indian rupee').fill('1860')
     page.get_by_placeholder('What was it?').fill('Dinner at Britto\'s')
     page.wait_for_timeout(700)
     page.screenshot(path=str(OUT / '2-add-expense.png'))
@@ -50,9 +53,48 @@ with sync_playwright() as p:
     page.keyboard.press('Escape')
     page.wait_for_timeout(500)
 
+    page.get_by_role('button', name='Group menu').click()
+    page.wait_for_timeout(500)
+    page.get_by_role('button', name='Summary').click()
+    page.wait_for_timeout(900)
+    page.screenshot(path=str(OUT / '5-summary.png'))
+    page.keyboard.press('Escape')
+    page.wait_for_timeout(500)
+
+    # An itemised bill: who had what, tax shared in proportion.
+    page.locator('#screen').get_by_role('button', name='Add expense').click()
+    page.get_by_label('Amount in Indian rupee').fill('2415')
+    page.get_by_placeholder('What was it?').fill('Dinner at Thalassa')
+    page.locator('details.expense-more summary').click()
+    page.get_by_role('tab', name='Items').click()
+    page.get_by_label('Item 1 name').fill('Seafood platter')
+    page.get_by_label('Item 1 amount').fill('1400')
+    page.locator('.item-row').nth(0).get_by_role('button', name='Kabir had this').click()
+    page.get_by_role('button', name='+ Add an item').click()
+    page.get_by_label('Item 2 name').fill('Mocktails')
+    page.get_by_label('Item 2 amount').fill('700')
+    for name in ['You', 'Rohan']:
+        page.locator('.item-row').nth(1).get_by_role('button', name=f'{name} had this').click()
+    page.locator('.x-mode').evaluate("n => n.scrollIntoView({ block: 'start' })")
+    page.wait_for_timeout(700)
+    page.screenshot(path=str(OUT / '6-items.png'))
+    page.keyboard.press('Escape')
+    page.wait_for_timeout(500)
+
+    # Abroad: typed in baht, kept in rupees.
+    page.locator('#screen').get_by_role('button', name='Add expense').click()
+    page.get_by_role('button', name='Currency: Indian rupee. Change').click()
+    page.get_by_role('button', name='Thai baht').click()
+    page.get_by_label('Amount in Thai baht').fill('1200')
+    page.get_by_placeholder('What was it?').fill('Longtail boat to Phi Phi')
+    page.wait_for_timeout(700)
+    page.screenshot(path=str(OUT / '7-currency.png'))
+    page.keyboard.press('Escape')
+    page.wait_for_timeout(500)
+
     page.goto(BASE + '/#/')
     page.wait_for_timeout(1000)
-    page.screenshot(path=str(OUT / '5-groups.png'))
+    page.screenshot(path=str(OUT / '8-groups.png'))
     ctx.close()
 
     # Feature graphic, 1024x500: the mark, the promise, two real screens.
