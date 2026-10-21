@@ -1,11 +1,16 @@
 [
   {
-    "relation": ["delegate_permission/common.handle_all_urls"],
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
     "target": {
       "namespace": "android_app",
       "package_name": "com.thealgothrim.settld",
       "sha256_cert_fingerprints": [
-        "26:77:88:72:4C:40:AE:C1:3F:C0:FA:54:8B:5C:9B:BA:41:8A:A7:C9:9D:D8:31:CB:10:E1:BD:0D:88:C1:E5:C6"
+        "26:77:88:72:4C:40:AE:C1:3F:C0:FA:54:8B:5C:9B:BA:41:8A:A7:C9:9D:D8:31:CB:10:E1:BD:0D:88:C1:E5:C6",
+        "67:98:E4:A4:11:E8:B6:57:49:AD:F8:56:78:B0:97:B0:99:CE:74:C2:50:E7:B5:A2:68:09:CD:54:18:E1:4F:C6",
+        "70:63:81:91:64:1F:50:3A:AC:C0:A4:46:B8:A9:9F:4F:25:C5:03:44:D2:91:6E:88:42:48:F5:AF:43:39:DF:FC",
+        "AD:5A:61:56:A7:98:70:29:7E:A2:7C:5D:7A:C8:DF:B8:2A:38:A9:0B:E6:7E:CF:FA:95:DB:6B:7B:99:EB:33:C2"
       ]
     }
   }

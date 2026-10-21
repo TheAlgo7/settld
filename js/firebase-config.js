@@ -6,10 +6,10 @@
 // Installed apps (the Play app included) sign in by redirect, and Chrome keeps
 // storage apart per site, so the redirect result is only readable when sign-in
 // runs on the app's own host. vercel.json proxies Firebase's /__/auth pages
-// there. Needs https://settld-ruddy.vercel.app/__/auth/handler among the
-// redirect URIs of the Google OAuth client; until then it is off by default
-// (localStorage "settld.sameSiteAuth" = "1" turns it on for testing).
-const SAME_SITE_AUTH_DEFAULT = false;
+// there. https://settld-ruddy.vercel.app/__/auth/handler is among the redirect
+// URIs of the Google OAuth client (added 21 Oct 2026), so it is on by default
+// (localStorage "settld.sameSiteAuth" = "0" turns it off for testing).
+const SAME_SITE_AUTH_DEFAULT = true;
 const APP_HOST = "settld-ruddy.vercel.app";
 
 function sameSiteAuth() {
