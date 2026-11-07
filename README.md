@@ -1,5 +1,8 @@
 <p align="center">
-  <img src="docs/readme/hero.png" alt="Settld: split, prove, settle" width="100%">
+  <picture>
+    <source media="(max-width: 600px)" srcset="docs/readme/hero-mobile.webp">
+    <img src="docs/readme/hero.webp" alt="Settld: split, prove, settle. An expense with its receipt, the Goa trip group, and the light theme on three phones" width="100%">
+  </picture>
 </p>
 
 <p align="center">
@@ -8,20 +11,15 @@
 </p>
 
 <p align="center">
-  <a href="https://settld-ruddy.vercel.app"><strong>Open Settld</strong></a>
-  &nbsp;·&nbsp;
-  <a href="#features">Features</a>
-  &nbsp;·&nbsp;
-  <a href="#data-and-firebase">Data and Firebase</a>
-  &nbsp;·&nbsp;
-  <a href="#run-locally">Run locally</a>
+  <a href="https://settld-ruddy.vercel.app"><img alt="Settld: Open the app" src="https://img.shields.io/badge/Settld-Open%20the%20app-e0533c?style=for-the-badge"></a>
 </p>
 
 <p align="center">
-  <img alt="Version 0.6" src="https://img.shields.io/badge/version-0.6-FF6F61?style=flat-square&labelColor=111111">
-  <img alt="Offline-first PWA" src="https://img.shields.io/badge/PWA-offline--first-FF6F61?style=flat-square&labelColor=111111">
-  <img alt="Firebase" src="https://img.shields.io/badge/Firebase-free%20tier-FF6F61?style=flat-square&labelColor=111111">
-  <img alt="Money in paise" src="https://img.shields.io/badge/money-integer%20paise-FF6F61?style=flat-square&labelColor=111111">
+  <a href="#what-it-looks-like">What it looks like</a> ·
+  <a href="#features">Features</a> ·
+  <a href="#data-and-firebase">Data</a> ·
+  <a href="#run-locally">Run locally</a> ·
+  <a href="#current-limits">Limits</a>
 </p>
 
 ## Why Settld
@@ -32,17 +30,29 @@ It works on the device first. IndexedDB is the source of truth, every core flow 
 
 Settld calculates and records suggested payments; **it does not hold funds, initiate transfers or process payments**.
 
-## Screenshots
 
-<table>
-  <tr>
-    <td align="center"><img src="docs/readme/group.png" width="160" alt="A group"><br><sub>A group on one screen</sub></td>
-    <td align="center"><img src="docs/readme/expense.png" width="160" alt="An expense with proof"><br><sub>An expense and its proof</sub></td>
-    <td align="center"><img src="docs/readme/settle.png" width="160" alt="Settle up"><br><sub>The settle plan</sub></td>
-    <td align="center"><img src="docs/readme/activity.png" width="160" alt="Activity"><br><sub>Every change, kept</sub></td>
-    <td align="center"><img src="docs/readme/light.png" width="160" alt="Light theme"><br><sub>The light theme</sub></td>
-  </tr>
-</table>
+## What it looks like
+
+<picture>
+  <source media="(max-width: 600px)" srcset="docs/readme/proof-mobile.webp">
+  <img src="docs/readme/proof.webp" alt="Proof stays attached: the hotel receipt kept with the expense, beside the expense on a phone" width="100%">
+</picture>
+
+**Proof stays attached.** Receipts and payment screenshots are compressed on the device and kept with the expense they belong to.
+
+<picture>
+  <source media="(max-width: 600px)" srcset="docs/readme/settle-mobile.webp">
+  <img src="docs/readme/settle.webp" alt="One transfer each: the settle plan's suggested transfers beside the Settle up sheet" width="100%">
+</picture>
+
+**One transfer each.** Balances are recomputed from the ledger, and the settle plan needs at most one transfer per person (members minus one). Settld records payments; it never moves money.
+
+<picture>
+  <source media="(max-width: 600px)" srcset="docs/readme/record-mobile.webp">
+  <img src="docs/readme/record.webp" alt="Every edit, on the record: the activity log and the friends list on two phones" width="100%">
+</picture>
+
+**Every edit, on the record.** An append-only history keeps every expense, edit, deletion and payment, and Friends nets out what you owe across every group.
 
 ## Features
 
@@ -51,13 +61,18 @@ Everything Splitwise keeps for Pro is free here, with no limit on groups, people
 - Groups, members, and equal, exact, percentage, shares-based or itemised splits (each item shared by whoever had it, tax and service shared in proportion)
 - Repeating expenses: weekly, fortnightly, monthly or yearly, added automatically on the day
 - Foreign currency: type the amount in any of 28 currencies and Settld keeps it in rupees at the day's rate (or yours)
+- Import a group from Splitwise's CSV export, with its balances checked against Splitwise's own total
+- Remind someone on WhatsApp with the amount and your UPI ID
+- Dark and light themes, each designed rather than inverted, plus six selectable accents
+
+<details>
+<summary><strong>Everything else it does</strong></summary>
+
 - Search across every group by name, note, person, category, item or amount
 - Comments on any expense, kept in the group's history
 - Deleted expenses can be brought back
 - A saved default split per group, for couples and flats that never split 50/50
 - Expenses with one person, outside any group
-- Import a group from Splitwise's CSV export, with its balances checked against Splitwise's own total
-- Remind someone on WhatsApp with the amount and your UPI ID
 - Spending charts by category, day or month, and person, for the group or just your share
 - A group as one scrolling screen: your position, who owes whom, then expenses by day
 - Receipt and payment-proof attachments, compressed on-device
@@ -65,9 +80,10 @@ Everything Splitwise keeps for Pro is free here, with no limit on groups, people
 - Friends: every person you share a group with, netted across all of them
 - An append-only history for expenses, edits, deletions, and recorded payments
 - Optional UPI deep links that open the user's payment app
-- Dark and light themes, each designed rather than inverted, plus six selectable accents
 - Responsive layouts, keyboard focus states, accessible sheets, and 48 px minimum touch targets
 - An invented sample trip to explore before creating anything
+
+</details>
 
 ## Data and Firebase
 
@@ -98,6 +114,15 @@ The first Google account used on a device claims its local dataset. Settld block
 
 Production authentication is Google-only. Phone authentication is intentionally omitted until SMS billing and abuse controls are configured.
 
+
+## Ledger invariants
+
+- Money is stored as integer paise; ledger math never uses floating-point currency values.
+- Split rounding uses deterministic largest-remainder distribution, with member ID as the tie-breaker.
+- Balances are derived from expenses and settlements rather than stored as mutable totals.
+- Deleted records are soft-deleted, while the activity trail remains append-only.
+
+
 ## Run locally
 
 Node.js 22 is the CI version.
@@ -109,7 +134,9 @@ npm start
 
 Open `http://localhost:5173`. Any static HTTP server can serve the repository; ES modules will not work correctly by opening `index.html` through `file://`.
 
-## Test
+
+<details>
+<summary><strong>Tests</strong></summary>
 
 ```sh
 npm test            # ledger arithmetic and settlement invariants
@@ -123,7 +150,10 @@ npm run test:rules  # Firestore security rules, multi-user, on the emulator
 
 Playwright starts the local server when one is not already running. GitHub Actions runs both suites for pull requests and pushes to `main`.
 
-## Deploy
+</details>
+
+<details>
+<summary><strong>Deploy</strong></summary>
 
 The GitHub repository is connected to Vercel. A push to `main` triggers the production deployment automatically; routine releases do not need a separate `vercel --prod` command.
 
@@ -139,14 +169,10 @@ The deployed rules pin each document's exact key set, so a new field on any sync
 
 `vercel.json` must keep `https://apis.google.com` in `script-src`, and `https://open.er-api.com` in `connect-src` for exchange rates. Firebase Auth loads `apis.google.com/js/api.js` for its popup and redirect resolver, and without it every Google sign-in fails before a popup opens. This is invisible to local testing because Vercel headers do not apply on `localhost`.
 
-## Ledger invariants
+</details>
 
-- Money is stored as integer paise; ledger math never uses floating-point currency values.
-- Split rounding uses deterministic largest-remainder distribution, with member ID as the tie-breaker.
-- Balances are derived from expenses and settlements rather than stored as mutable totals.
-- Deleted records are soft-deleted, while the activity trail remains append-only.
-
-## Project map
+<details>
+<summary><strong>Project map</strong></summary>
 
 ```text
 index.html                 App shell and PWA entry point
@@ -170,6 +196,10 @@ scripts/readme-shots.py    README screenshots
 DESIGN.md                  Visual system and component rules
 ```
 
+The pictures on this page come from `scripts/readme-shots.py` (captures in `docs/readme/src/assets`) and `docs/readme/src/readme.js`, drawn by The Algothrim's README Kit.
+
+</details>
+
 ## Current limits
 
 - Balances settle in rupees; a foreign expense is converted when it is added, not revalued later
@@ -178,6 +208,7 @@ DESIGN.md                  Visual system and component rules
 - Shared groups sync on foreground, not in realtime, to stay inside the free tier
 - Proof stored in Firestore is subject to the document-size guard in `js/cloud.js`
 - No way to find someone by phone number, because verifying one costs money
+
 
 ## Licence
 
